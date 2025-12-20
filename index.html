@@ -209,6 +209,7 @@
     const moon = createMoon();
     const moonInitialRotation = Math.random() * Math.PI * 2; // 開くたびに違う面
     moon.rotation.y = moonInitialRotation;
+    moon.rotation.x = Math.PI / 2; // テクスチャを上に90度回転
     underwaterScene.add(moon);
     
     // 月の周りの淡いグロー（控えめに）
