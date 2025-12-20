@@ -202,16 +202,20 @@
       );
       const mat = new THREE.MeshBasicMaterial({ map: tex });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(0, -CONFIG.moonDepth, 0);
       return mesh;
     }
     
     const moon = createMoon();
-    const moonInitialRotation = Math.random() * Math.PI * 2; // 開くたびに違う面
+    const moonInitialRotation = Math.random() * Math.PI * 2;
+
+    const moonPivot = new THREE.Group();
+    moonPivot.position.set(0, -CONFIG.moonDepth, 0);
+    moon.position.set(0, 0, 0);
+    moonPivot.add(moon);
+    moonPivot.rotation.x = Math.PI / 2;
     moon.rotation.y = moonInitialRotation;
-    moon.rotation.x = Math.PI / 2; // テクスチャを上に90度回転
-    underwaterScene.add(moon);
-    
+    underwaterScene.add(moonPivot);
+
     // 月の周りの淡いグロー（控えめに）
     const moonGlow = new THREE.Mesh(
       new THREE.PlaneGeometry(CONFIG.moonSize * 5, CONFIG.moonSize * 5),
