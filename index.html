@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>月飼い - Keeping the Moon</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      touch-action: none;
+    }
+    #container { width: 100%; height: 100%; }
+    canvas { display: block; }
+    #title {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 0.5em;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 1;
+      transition: opacity 3s ease;
+    }
+    #title.hidden { opacity: 0; }
+    #hint {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.2em;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 1;
+      transition: opacity 2s ease;
+    }
+    #hint.hidden { opacity: 0; }
+    #fullscreen-btn {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      width: 40px;
+      height: 40px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      cursor: pointer;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.7;
+      transition: opacity 0.8s ease, background 0.3s ease;
+    }
+    #fullscreen-btn:hover,
+    #fullscreen-btn.faded:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.15);
+      pointer-events: auto;
+    }
+    #fullscreen-btn.faded {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #fullscreen-area {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 100px;
+      height: 100px;
+      z-index: 101;
+    }
+    #fullscreen-area:hover ~ #fullscreen-btn,
+    #fullscreen-area:hover ~ #fullscreen-btn.faded {
+      opacity: 0.7;
+      pointer-events: auto;
+    }
+    #fullscreen-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke: rgba(255, 255, 255, 0.6);
+      fill: none;
+      stroke-width: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <div id="title">月 飼 い</div>
+  <div id="hint">水面に触れてみてください</div>
+  <div id="fullscreen-area"></div>
+  <button id="fullscreen-btn">
+    <svg viewBox="0 0 24 24">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+    </svg>
+  </button>
+  
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    
+    // ========================================
+    // 設定
+    // ========================================
+    const CONFIG = {
+      moonDepth: 5,
+      moonSize: 2.0,
+      starCount: 250,
+    };
+    
+    // ========================================
+    // レンダラー・カメラ
+    // ========================================
+    const container = document.getElementById('container');
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+    
+    // メインカメラ（上から見下ろす）
+    const camera = new THREE.PerspectiveCamera(
+      50, window.innerWidth / window.innerHeight, 0.1, 100
+    );
+    camera.position.set(0, 8, 0);
+    camera.lookAt(0, 0, 0);
+    
+    // ========================================
+    // シーン1: 月と星空（水中の世界）
+    // ========================================
+    const underwaterScene = new THREE.Scene();
+    underwaterScene.background = new THREE.Color(0x010306); // より深い夜空色
+    
+    // 星空
+    function createStarfield() {
+      const geo = new THREE.BufferGeometry();
+      const positions = [], sizes = [], alphas = [];
+      
+      for (let i = 0; i < CONFIG.starCount; i++) {
+        const x = (Math.random() - 0.5) * 50;
+        const z = (Math.random() - 0.5) * 50;
+        const y = -20 - Math.random() * 15;
+        positions.push(x, y, z);
+        sizes.push(0.4 + Math.random() * 0.8);
+        
+        // 中心から離れるほど明るい（月明かりで中心は暗い）
+        const dist = Math.sqrt(x*x + z*z);
+        alphas.push(Math.min(1, dist / 12) * 0.5 + 0.1);
+      }
+      
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+      geo.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
+      
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { time: { value: 0 } },
+        vertexShader: `
+          attribute float size;
+          attribute float alpha;
+          varying float vAlpha;
+          uniform float time;
+          void main() {
+            float twinkle = sin(time * 0.4 + position.x * 1.5 + position.z) * 0.2 + 0.8;
+            vAlpha = alpha * twinkle;
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = size * (120.0 / -mv.z);
+            gl_Position = projectionMatrix * mv;
+          }
+        `,
+        fragmentShader: `
+          varying float vAlpha;
+          void main() {
+            float d = length(gl_PointCoord - 0.5);
+            if (d > 0.5) discard;
+            float glow = smoothstep(0.5, 0.0, d);
+            gl_FragColor = vec4(0.75, 0.8, 1.0, glow * vAlpha);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      
+      return new THREE.Points(geo, mat);
+    }
+    
+    const starfield = createStarfield();
+    underwaterScene.add(starfield);
+    
+    // 月
+    function createMoon() {
+      const geo = new THREE.SphereGeometry(CONFIG.moonSize, 64, 64);
+      const loader = new THREE.TextureLoader();
+      const tex = loader.load(
+        'https://www.solarsystemscope.com/textures/download/2k_moon.jpg',
+        t => { t.colorSpace = THREE.SRGBColorSpace; }
+      );
+      const mat = new THREE.MeshBasicMaterial({ map: tex });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(0, -CONFIG.moonDepth, 0);
+      return mesh;
+    }
+    
+    const moon = createMoon();
+    const moonInitialRotation = Math.random() * Math.PI * 2; // 開くたびに違う面
+    moon.rotation.y = moonInitialRotation;
+    underwaterScene.add(moon);
+    
+    // 月の周りの淡いグロー（控えめに）
+    const moonGlow = new THREE.Mesh(
+      new THREE.PlaneGeometry(CONFIG.moonSize * 5, CONFIG.moonSize * 5),
+      new THREE.ShaderMaterial({
+        uniforms: {},
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec2 vUv;
+          void main() {
+            float dist = length(vUv - 0.5) * 2.0;
+            float glow = smoothstep(1.0, 0.3, dist) * 0.15;
+            gl_FragColor = vec4(0.9, 0.85, 0.7, glow);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    moonGlow.rotation.x = -Math.PI / 2;
+    moonGlow.position.set(0, moon.position.y - 0.1, 0);
+    underwaterScene.add(moonGlow);
+    
+    // ========================================
+    // レンダーターゲット（月と星空をテクスチャに）
+    // ========================================
+    const renderTarget = new THREE.WebGLRenderTarget(
+      window.innerWidth * renderer.getPixelRatio(),
+      window.innerHeight * renderer.getPixelRatio()
+    );
+    
+    // ========================================
+    // シーン2: 水面（メインシーン）
+    // ========================================
+    const mainScene = new THREE.Scene();
+    
+    const WATER_SIZE = 16;
+    const WATER_SEG = 150;
+    const waveHeight = new Float32Array((WATER_SEG + 1) ** 2);
+    const waveVelocity = new Float32Array((WATER_SEG + 1) ** 2);
+    
+    function createWater() {
+      const geo = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEG, WATER_SEG);
+      geo.rotateX(-Math.PI / 2);
+      
+      const count = geo.attributes.position.count;
+      geo.setAttribute('waveHeight', new THREE.BufferAttribute(new Float32Array(count), 1));
+      
+      const mat = new THREE.ShaderMaterial({
+        uniforms: {
+          underwaterTex: { value: renderTarget.texture },
+          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+          time: { value: 0 },
+          moonPos: { value: new THREE.Vector3(0, -CONFIG.moonDepth, 0) },
+          cameraY: { value: camera.position.y },
+        },
+        vertexShader: `
+          attribute float waveHeight;
+          varying float vHeight;
+          varying vec2 vScreenUV;
+          varying vec3 vWorldPos;
+          varying vec3 vNormal;
+          
+          void main() {
+            vHeight = waveHeight;
+            
+            vec3 pos = position;
+            pos.y += waveHeight * 0.4;
+            
+            vWorldPos = (modelMatrix * vec4(pos, 1.0)).xyz;
+            
+            // 法線を波から計算
+            // 隣接頂点との高低差から法線を推定（シンプル版）
+            vNormal = normalize(vec3(-waveHeight * 0.5, 1.0, -waveHeight * 0.3));
+            
+            vec4 clipPos = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+            vScreenUV = (clipPos.xy / clipPos.w) * 0.5 + 0.5;
+            
+            gl_Position = clipPos;
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D underwaterTex;
+          uniform vec2 resolution;
+          uniform float time;
+          uniform vec3 moonPos;
+          uniform float cameraY;
+          
+          varying float vHeight;
+          varying vec2 vScreenUV;
+          varying vec3 vWorldPos;
+          varying vec3 vNormal;
+          
+          void main() {
+            // 波による屈折オフセット（強め）
+            vec2 distortion = vNormal.xz * vHeight * 0.35;
+            vec2 uv = vScreenUV + distortion;
+            uv = clamp(uv, 0.0, 1.0);
+            
+            // 水中の映像（月と星空）を歪めて取得
+            vec3 underwater = texture2D(underwaterTex, uv).rgb;
+            
+            // 月明かりの反射（控えめなスペキュラ）
+            vec3 viewDir = normalize(vec3(0.0, cameraY, 0.0) - vWorldPos);
+            vec3 lightDir = normalize(moonPos - vWorldPos);
+            vec3 halfDir = normalize(viewDir - lightDir);
+            vec3 normal = normalize(vNormal);
+            
+            float spec = pow(max(dot(normal, halfDir), 0.0), 64.0);
+            vec3 moonlightReflect = vec3(0.9, 0.85, 0.7) * spec * 0.25;
+            
+            // 波頭のハイライト（感度上げ）
+            float waveHighlight = smoothstep(0.01, 0.06, vHeight) * 0.55;
+            vec3 highlight = vec3(0.7, 0.75, 0.9) * waveHighlight;
+            
+            // 水面の色味（エッジ部分のみ、中心は透明）
+            float distFromCenter = length(vWorldPos.xz);
+            float edgeFade = smoothstep(3.0, 8.0, distFromCenter);
+            vec3 waterTint = vec3(0.01, 0.03, 0.08) * edgeFade * 0.3;
+            
+            // 合成（水中の映像がメイン）
+            vec3 finalColor = underwater;
+            finalColor += waterTint;
+            finalColor += moonlightReflect;
+            finalColor += highlight;
+            
+            // 波の谷は少し暗く
+            float valleyDark = smoothstep(0.0, -0.08, vHeight) * 0.15;
+            finalColor *= (1.0 - valleyDark);
+            
+            gl_FragColor = vec4(finalColor, 1.0);
+          }
+        `,
+      });
+      
+      return new THREE.Mesh(geo, mat);
+    }
+    
+    const water = createWater();
+    mainScene.add(water);
+    
+    // ========================================
+    // 波のシミュレーション
+    // ========================================
+    function updateWaves() {
+      const seg = WATER_SEG + 1;
+      const damping = 0.97;
+      const speed = 0.45;
+      
+      // 波動方程式（内部）
+      for (let j = 1; j < seg - 1; j++) {
+        for (let i = 1; i < seg - 1; i++) {
+          const idx = j * seg + i;
+          const avg = (
+            waveHeight[idx - 1] + waveHeight[idx + 1] +
+            waveHeight[idx - seg] + waveHeight[idx + seg]
+          ) * 0.25;
+          
+          waveVelocity[idx] += (avg - waveHeight[idx]) * speed;
+          waveVelocity[idx] *= damping;
+        }
+      }
+      
+      // 境界反射（壁で跳ね返る）
+      for (let i = 0; i < seg; i++) {
+        // 上端・下端
+        waveHeight[i] = waveHeight[i + seg];
+        waveHeight[(seg - 1) * seg + i] = waveHeight[(seg - 2) * seg + i];
+        // 左端・右端
+        waveHeight[i * seg] = waveHeight[i * seg + 1];
+        waveHeight[i * seg + seg - 1] = waveHeight[i * seg + seg - 2];
+      }
+      
+      for (let i = 0; i < waveHeight.length; i++) {
+        waveHeight[i] += waveVelocity[i];
+        waveHeight[i] = Math.max(-0.8, Math.min(0.8, waveHeight[i]));
+      }
+      
+      // ジオメトリ更新
+      const attr = water.geometry.getAttribute('waveHeight');
+      for (let i = 0; i < attr.count; i++) {
+        attr.setX(i, waveHeight[i]);
+      }
+      attr.needsUpdate = true;
+    }
+    
+    // 波紋を発生
+    function createRipple(wx, wz, strength = 0.5) {
+      const seg = WATER_SEG + 1;
+      const half = WATER_SIZE / 2;
+      const gx = Math.floor((wx + half) / WATER_SIZE * WATER_SEG);
+      const gz = Math.floor((wz + half) / WATER_SIZE * WATER_SEG);
+      
+      const radius = 4;
+      for (let dz = -radius; dz <= radius; dz++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const x = gx + dx, z = gz + dz;
+          if (x >= 0 && x < seg && z >= 0 && z < seg) {
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist < radius) {
+              const idx = z * seg + x;
+              waveHeight[idx] = -(1 - dist / radius) * strength;
+            }
+          }
+        }
+      }
+    }
+    
+    // ========================================
+    // インタラクション
+    // ========================================
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let isDown = false;
+    
+    function onDown(e) {
+      isDown = true;
+      handle(e);
+      hideOverlay();
+    }
+    
+    // オーバーレイを隠す
+    let overlayHidden = false;
+    function hideOverlay() {
+      if (!overlayHidden) {
+        document.getElementById('hint').classList.add('hidden');
+        document.getElementById('title').classList.add('hidden');
+        overlayHidden = true;
+      }
+    }
+    
+    // 数秒後に自動フェードアウト
+    setTimeout(() => {
+      hideOverlay();
+    }, 4000);
+    function onMove(e) { if (isDown) handle(e); }
+    function onUp() { isDown = false; }
+    
+    function handle(e) {
+      const cx = e.touches ? e.touches[0].clientX : e.clientX;
+      const cy = e.touches ? e.touches[0].clientY : e.clientY;
+      pointer.x = (cx / window.innerWidth) * 2 - 1;
+      pointer.y = -(cy / window.innerHeight) * 2 + 1;
+      
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObject(water);
+      if (hits.length > 0) {
+        createRipple(hits[0].point.x, hits[0].point.z, 0.6);
+      }
+    }
+    
+    renderer.domElement.addEventListener('mousedown', onDown);
+    renderer.domElement.addEventListener('mousemove', onMove);
+    renderer.domElement.addEventListener('mouseup', onUp);
+    renderer.domElement.addEventListener('mouseleave', onUp);
+    renderer.domElement.addEventListener('touchstart', onDown, { passive: false });
+    renderer.domElement.addEventListener('touchmove', onMove, { passive: false });
+    renderer.domElement.addEventListener('touchend', onUp);
+    
+    // ========================================
+    // リサイズ
+    // ========================================
+    function onResize() {
+      const w = window.innerWidth, h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      renderTarget.setSize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
+      water.material.uniforms.resolution.value.set(w, h);
+    }
+    window.addEventListener('resize', onResize);
+    
+    // ========================================
+    // アニメーション
+    // ========================================
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      const time = performance.now() * 0.001;
+      
+      updateWaves();
+      
+      moon.rotation.y = moonInitialRotation + time * 0.03;
+      starfield.material.uniforms.time.value = time;
+      water.material.uniforms.time.value = time;
+      
+      // 1) 月と星空をレンダーターゲットに描画
+      renderer.setRenderTarget(renderTarget);
+      renderer.render(underwaterScene, camera);
+      
+      // 2) 水面をメインに描画
+      renderer.setRenderTarget(null);
+      renderer.render(mainScene, camera);
+    }
+    
+    animate();
+    
+    // 自然な波紋（少し強め）
+    setInterval(() => {
+      const x = (Math.random() - 0.5) * WATER_SIZE * 0.7;
+      const z = (Math.random() - 0.5) * WATER_SIZE * 0.7;
+      createRipple(x, z, 0.25);
+    }, 2500);
+    
+    // ========================================
+    // 全画面ボタン
+    // ========================================
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.log('Fullscreen error:', err);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+    
+    // ボタンをフェードアウト（数秒後）
+    setTimeout(() => {
+      fullscreenBtn.classList.add('faded');
+    }, 5000);
+    
+  </script>
+</body>
+</html>
