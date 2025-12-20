@@ -91,6 +91,43 @@
       fill: none;
       stroke-width: 1.5;
     }
+    #credits {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.4);
+      line-height: 1.6;
+      text-align: right;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 1;
+      transition: opacity 0.8s ease;
+    }
+    #credits.hidden { opacity: 0; }
+    #credits a {
+      color: rgba(255, 255, 255, 0.5);
+      text-decoration: none;
+      pointer-events: auto;
+      transition: color 0.3s ease;
+    }
+    #credits a:hover {
+      color: rgba(255, 255, 255, 0.8);
+    }
+    #credits-area {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 120px;
+      height: 120px;
+      z-index: 101;
+    }
+    #credits-area:hover ~ #credits,
+    #credits-area:hover ~ #credits.hidden {
+      opacity: 0.7;
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body>
@@ -103,6 +140,11 @@
       <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
     </svg>
   </button>
+  <div id="credits-area"></div>
+  <div id="credits">
+    Moon texture: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a><br>
+    Repository: <a href="https://github.com/clockcrockwork/moon-keeper" target="_blank" rel="noopener">moon-keeper</a>
+  </div>
   
   <script type="importmap">
   {
@@ -455,6 +497,7 @@
       if (!overlayHidden) {
         document.getElementById('hint').classList.add('hidden');
         document.getElementById('title').classList.add('hidden');
+        document.getElementById('credits').classList.add('hidden');
         overlayHidden = true;
       }
     }
