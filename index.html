@@ -208,7 +208,7 @@
       const geo = new THREE.SphereGeometry(CONFIG.moonSize, 64, 64);
       const loader = new THREE.TextureLoader();
       const tex = loader.load(
-        'https://www.solarsystemscope.com/textures/download/2k_moon.jpg',
+        'moon.webp',
         t => { t.colorSpace = THREE.SRGBColorSpace; }
       );
       const mat = new THREE.MeshBasicMaterial({ map: tex });
