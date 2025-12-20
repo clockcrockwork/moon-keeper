@@ -44,53 +44,6 @@
       transition: opacity 2s ease;
     }
     #hint.hidden { opacity: 0; }
-    #fullscreen-btn {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      width: 40px;
-      height: 40px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 8px;
-      cursor: pointer;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0.7;
-      transition: opacity 0.8s ease, background 0.3s ease;
-    }
-    #fullscreen-btn:hover,
-    #fullscreen-btn.faded:hover {
-      opacity: 1;
-      background: rgba(255, 255, 255, 0.15);
-      pointer-events: auto;
-    }
-    #fullscreen-btn.faded {
-      opacity: 0;
-      pointer-events: none;
-    }
-    #fullscreen-area {
-      position: fixed;
-      top: 0;
-      right: 0;
-      width: 100px;
-      height: 100px;
-      z-index: 101;
-    }
-    #fullscreen-area:hover ~ #fullscreen-btn,
-    #fullscreen-area:hover ~ #fullscreen-btn.faded {
-      opacity: 0.7;
-      pointer-events: auto;
-    }
-    #fullscreen-btn svg {
-      width: 18px;
-      height: 18px;
-      stroke: rgba(255, 255, 255, 0.6);
-      fill: none;
-      stroke-width: 1.5;
-    }
     #credits {
       position: fixed;
       bottom: 16px;
@@ -134,12 +87,6 @@
   <div id="container"></div>
   <div id="title">月 飼 い</div>
   <div id="hint">水面に触れてみてください</div>
-  <div id="fullscreen-area"></div>
-  <button id="fullscreen-btn">
-    <svg viewBox="0 0 24 24">
-      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-    </svg>
-  </button>
   <div id="credits-area"></div>
   <div id="credits">
     Moon texture: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a><br>
@@ -574,27 +521,7 @@
       const z = (Math.random() - 0.5) * WATER_SIZE * 0.7;
       createRipple(x, z, 0.25);
     }, 2500);
-    
-    // ========================================
-    // 全画面ボタン
-    // ========================================
-    const fullscreenBtn = document.getElementById('fullscreen-btn');
-    
-    fullscreenBtn.addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-          console.log('Fullscreen error:', err);
-        });
-      } else {
-        document.exitFullscreen();
-      }
-    });
-    
-    // ボタンをフェードアウト（数秒後）
-    setTimeout(() => {
-      fullscreenBtn.classList.add('faded');
-    }, 5000);
-    
+
   </script>
 </body>
 </html>
