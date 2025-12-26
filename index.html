@@ -81,6 +81,52 @@
       opacity: 0.7;
       pointer-events: auto;
     }
+
+    /* 月相スライダー（左下・ホバー表示） */
+    #phase-area {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 150px;
+      height: 130px;
+      z-index: 101;
+    }
+    #phase-ui {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.65);
+      font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
+      font-size: 11px;
+      line-height: 1.6;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 100;
+      width: 180px;
+    }
+    #phase-area:hover ~ #phase-ui,
+    #phase-area:hover ~ #phase-ui.hidden {
+      opacity: 0.9;
+      pointer-events: auto;
+    }
+    #phase-ui label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #phase-ui input[type="range"] {
+      width: 120px;
+    }
+    #phase-ui .value {
+      min-width: 48px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
   </style>
 </head>
 <body>
@@ -91,6 +137,15 @@
   <div id="credits">
     Moon texture: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a><br>
     Repository: <a href="https://github.com/clockcrockwork/moon-keeper" target="_blank" rel="noopener">moon-keeper</a>
+  </div>
+  <div id="phase-area"></div>
+  <div id="phase-ui" class="hidden">
+    <label>
+      月相
+      <input id="phase-slider" type="range" min="0" max="1" step="0.001" value="0.5" aria-label="moon phase" />
+      <span class="value" id="phase-value">0.500</span>
+    </label>
+    <div>左下ホバーで表示（制作・検証用）</div>
   </div>
   
   <script type="importmap">
@@ -110,8 +165,32 @@
     const CONFIG = {
       moonDepth: 5,
       moonSize: 2.0,
-      starCount: 250,
+      starCount: 300,
+      starDensityMin: 0.35,
+      starDensityMax: 1.0,
     };
+
+    // ========================================
+    // 月相計算
+    // ========================================
+    function illuminatedFraction(phase01) {
+      // 0.0 = 新月, 0.5 = 満月
+      return 0.5 * (1 - Math.cos(phase01 * Math.PI * 2));
+    }
+
+    function calculateMoonPhase(date = new Date()) {
+      // 2000-01-06 18:14 UTC の新月を基準にする簡易モデル
+      const synodicMonth = 29.53058867;
+      const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14, 0);
+      const daysSinceKnown = (date.getTime() - knownNewMoon) / 86400000;
+      const phase01 = ((daysSinceKnown % synodicMonth) + synodicMonth) % synodicMonth / synodicMonth;
+      return {
+        phase01,
+        fraction01: illuminatedFraction(phase01),
+      };
+    }
+
+    const phaseState = calculateMoonPhase();
     
     // ========================================
     // レンダラー・カメラ
@@ -156,17 +235,18 @@
       geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geo.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
       geo.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
-      
+
       const mat = new THREE.ShaderMaterial({
-        uniforms: { time: { value: 0 } },
+        uniforms: { time: { value: 0 }, density: { value: CONFIG.starDensityMax } },
         vertexShader: `
           attribute float size;
           attribute float alpha;
           varying float vAlpha;
           uniform float time;
+          uniform float density;
           void main() {
             float twinkle = sin(time * 0.4 + position.x * 1.5 + position.z) * 0.2 + 0.8;
-            vAlpha = alpha * twinkle;
+            vAlpha = alpha * twinkle * density;
             vec4 mv = modelViewMatrix * vec4(position, 1.0);
             gl_PointSize = size * (120.0 / -mv.z);
             gl_Position = projectionMatrix * mv;
@@ -200,11 +280,17 @@
         'moon.webp',
         t => { t.colorSpace = THREE.SRGBColorSpace; }
       );
-      const mat = new THREE.MeshBasicMaterial({ map: tex });
+      const mat = new THREE.MeshStandardMaterial({
+        map: tex,
+        roughness: 0.8,
+        metalness: 0.0,
+        emissive: new THREE.Color(0x0d0d0d),
+        emissiveIntensity: 0.25,
+      });
       const mesh = new THREE.Mesh(geo, mat);
       return mesh;
     }
-    
+
     const moon = createMoon();
     const moonInitialRotation = Math.random() * Math.PI * 2;
 
@@ -220,7 +306,7 @@
     const moonGlow = new THREE.Mesh(
       new THREE.PlaneGeometry(CONFIG.moonSize * 5, CONFIG.moonSize * 5),
       new THREE.ShaderMaterial({
-        uniforms: {},
+        uniforms: { glowStrength: { value: 0.35 } },
         vertexShader: `
           varying vec2 vUv;
           void main() {
@@ -230,20 +316,33 @@
         `,
         fragmentShader: `
           varying vec2 vUv;
+          uniform float glowStrength;
           void main() {
             float dist = length(vUv - 0.5) * 2.0;
-            float glow = smoothstep(1.0, 0.3, dist) * 0.15;
+            float glow = smoothstep(1.0, 0.3, dist) * glowStrength;
             gl_FragColor = vec4(0.9, 0.85, 0.7, glow);
           }
         `,
         transparent: true,
         blending: THREE.AdditiveBlending,
-        depthWrite: false
+        depthWrite: false,
+        side: THREE.DoubleSide
       })
     );
     moonGlow.rotation.x = -Math.PI / 2;
-    moonGlow.position.set(0, moon.position.y - 0.1, 0);
+    moonGlow.position.copy(moonPivot.position);
     underwaterScene.add(moonGlow);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.05);
+    underwaterScene.add(ambient);
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    const sunTarget = new THREE.Object3D();
+    sunTarget.position.copy(moonPivot.position);
+    underwaterScene.add(sunTarget);
+    sunLight.target = sunTarget;
+    sunLight.position.set(3, 4, 1);
+    underwaterScene.add(sunLight);
     
     // ========================================
     // レンダーターゲット（月と星空をテクスチャに）
@@ -262,6 +361,7 @@
     const WATER_SEG = 150;
     const waveHeight = new Float32Array((WATER_SEG + 1) ** 2);
     const waveVelocity = new Float32Array((WATER_SEG + 1) ** 2);
+    let touchEnergy = 0;
     
     function createWater() {
       const geo = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEG, WATER_SEG);
@@ -277,6 +377,9 @@
           time: { value: 0 },
           moonPos: { value: new THREE.Vector3(0, -CONFIG.moonDepth, 0) },
           cameraY: { value: camera.position.y },
+          phaseFraction: { value: phaseState.fraction01 },
+          moonColor: { value: new THREE.Color(0.9, 0.85, 0.7) },
+          touchEnergy: { value: 0 },
         },
         vertexShader: `
           attribute float waveHeight;
@@ -309,49 +412,64 @@
           uniform float time;
           uniform vec3 moonPos;
           uniform float cameraY;
+          uniform float phaseFraction;
+          uniform vec3 moonColor;
+          uniform float touchEnergy;
           
           varying float vHeight;
           varying vec2 vScreenUV;
           varying vec3 vWorldPos;
           varying vec3 vNormal;
-          
+
           void main() {
-            // 波による屈折オフセット（強め）
-            vec2 distortion = vNormal.xz * vHeight * 0.35;
-            vec2 uv = vScreenUV + distortion;
-            uv = clamp(uv, 0.0, 1.0);
-            
+            float fraction = clamp(phaseFraction, 0.0, 1.0);
+
+            // 波による屈折オフセット（デカップリング済み）
+            vec2 baseDistortion = vNormal.xz * vHeight * 0.35;
+            float distortGain = mix(1.15, 1.0, pow(fraction, 0.8));
+            vec2 distortion = baseDistortion * distortGain;
+            vec2 uv = clamp(vScreenUV + distortion, 0.0, 1.0);
+
             // 水中の映像（月と星空）を歪めて取得
             vec3 underwater = texture2D(underwaterTex, uv).rgb;
-            
+
             // 月明かりの反射（控えめなスペキュラ）
             vec3 viewDir = normalize(vec3(0.0, cameraY, 0.0) - vWorldPos);
             vec3 lightDir = normalize(moonPos - vWorldPos);
-            vec3 halfDir = normalize(viewDir - lightDir);
+            vec3 halfDir = normalize(viewDir + lightDir);
             vec3 normal = normalize(vNormal);
-            
+
             float spec = pow(max(dot(normal, halfDir), 0.0), 64.0);
-            vec3 moonlightReflect = vec3(0.9, 0.85, 0.7) * spec * 0.25;
-            
-            // 波頭のハイライト（感度上げ）
-            float waveHighlight = smoothstep(0.01, 0.06, vHeight) * 0.55;
+            float specGain = mix(0.12, 0.25, pow(fraction, 0.8));
+            vec3 moonlightReflect = moonColor * spec * specGain;
+
+            // 波頭のハイライト（二段構え）
+            float waveSignal = smoothstep(0.01, 0.06, vHeight);
+            float waveBase = waveSignal * 0.35;
+            float waveMoonAdd = waveSignal * 0.20 * pow(fraction, 0.7);
+            float waveHighlight = waveBase + waveMoonAdd;
             vec3 highlight = vec3(0.7, 0.75, 0.9) * waveHighlight;
-            
+
+            // 触った瞬間だけ出る補助光
+            float interaction = touchEnergy * smoothstep(0.02, 0.08, abs(vHeight));
+            vec3 touchGlow = vec3(0.5, 0.6, 0.9) * interaction * 0.35;
+
             // 水面の色味（エッジ部分のみ、中心は透明）
             float distFromCenter = length(vWorldPos.xz);
             float edgeFade = smoothstep(3.0, 8.0, distFromCenter);
             vec3 waterTint = vec3(0.01, 0.03, 0.08) * edgeFade * 0.3;
-            
+
             // 合成（水中の映像がメイン）
             vec3 finalColor = underwater;
             finalColor += waterTint;
             finalColor += moonlightReflect;
             finalColor += highlight;
-            
+            finalColor += touchGlow;
+
             // 波の谷は少し暗く
             float valleyDark = smoothstep(0.0, -0.08, vHeight) * 0.15;
             finalColor *= (1.0 - valleyDark);
-            
+
             gl_FragColor = vec4(finalColor, 1.0);
           }
         `,
@@ -362,6 +480,50 @@
     
     const water = createWater();
     mainScene.add(water);
+
+    function updatePhaseUI() {
+      const slider = document.getElementById('phase-slider');
+      const value = document.getElementById('phase-value');
+      if (slider && value) {
+        slider.value = phaseState.phase01.toFixed(3);
+        value.textContent = phaseState.phase01.toFixed(3);
+      }
+    }
+
+    function applyPhaseState() {
+      const angle = phaseState.phase01 * Math.PI * 2;
+      const radius = 6.5;
+      sunLight.position.set(Math.cos(angle) * radius, 4.5, Math.sin(angle) * radius);
+      sunLight.target.position.copy(moonPivot.position);
+      sunLight.target.updateMatrixWorld();
+
+      const glow = THREE.MathUtils.lerp(0.2, 0.55, Math.pow(phaseState.fraction01, 0.7));
+      moonGlow.material.uniforms.glowStrength.value = glow;
+      sunLight.intensity = THREE.MathUtils.lerp(0.45, 1.6, Math.pow(phaseState.fraction01, 0.9));
+      water.material.uniforms.phaseFraction.value = phaseState.fraction01;
+      water.material.uniforms.moonPos.value.set(moonPivot.position.x, moonPivot.position.y, moonPivot.position.z);
+
+      const density = THREE.MathUtils.lerp(
+        CONFIG.starDensityMax,
+        CONFIG.starDensityMin,
+        Math.pow(phaseState.fraction01, 0.8)
+      );
+      starfield.material.uniforms.density.value = density;
+
+      updatePhaseUI();
+    }
+
+    function initPhaseUI() {
+      const slider = document.getElementById('phase-slider');
+      if (!slider) return;
+      slider.addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        phaseState.phase01 = isNaN(value) ? phaseState.phase01 : value;
+        phaseState.fraction01 = illuminatedFraction(phaseState.phase01);
+        applyPhaseState();
+      });
+      updatePhaseUI();
+    }
     
     // ========================================
     // 波のシミュレーション
@@ -414,6 +576,8 @@
       const half = WATER_SIZE / 2;
       const gx = Math.floor((wx + half) / WATER_SIZE * WATER_SEG);
       const gz = Math.floor((wz + half) / WATER_SIZE * WATER_SEG);
+
+      touchEnergy = Math.min(1.0, touchEnergy + strength * 0.6);
       
       const radius = 4;
       for (let dz = -radius; dz <= radius; dz++) {
@@ -481,6 +645,9 @@
     renderer.domElement.addEventListener('touchstart', onDown, { passive: false });
     renderer.domElement.addEventListener('touchmove', onMove, { passive: false });
     renderer.domElement.addEventListener('touchend', onUp);
+
+    initPhaseUI();
+    applyPhaseState();
     
     // ========================================
     // リサイズ
@@ -500,15 +667,19 @@
     // ========================================
     function animate() {
       requestAnimationFrame(animate);
-      
+
       const time = performance.now() * 0.001;
-      
+
       updateWaves();
-      
+
       moon.rotation.y = moonInitialRotation + time * 0.006;
+      moonGlow.position.copy(moonPivot.position);
+      moonGlow.quaternion.copy(camera.quaternion);
       starfield.material.uniforms.time.value = time;
       water.material.uniforms.time.value = time;
-      
+      touchEnergy *= 0.92;
+      water.material.uniforms.touchEnergy.value = touchEnergy;
+
       // 1) 月と星空をレンダーターゲットに描画
       renderer.setRenderTarget(renderTarget);
       renderer.render(underwaterScene, camera);
