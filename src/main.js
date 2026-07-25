@@ -84,6 +84,9 @@ const input = createInput({
   water,
   state,
   onFirstTouch: () => overlay.hide(),
+  // 長押しで月を掬う。「いとも簡単に捕獲された」
+  onScoop: (x, z) => moon.hold(x, z),
+  onScoopEnd: () => moon.release(),
 });
 
 onStateChange((s) => {
@@ -144,7 +147,13 @@ function animate(now) {
 
   water.step(steps, time);
   starfield.update(time);
-  moon.update(time);
+  moon.update(time, {
+    energy: water.energy,
+    pointerVelocity: input.isDown ? input.velocity : null,
+    dt,
+  });
+  // 月が漂うので、水面の透過ハイライトも一緒に動かす
+  water.setMoonPosition(moon.worldPosition);
 
   // 1) 月と星空をレンダーターゲットに描画
   renderer.setRenderTarget(renderTarget);

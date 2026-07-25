@@ -3,6 +3,7 @@ import * as THREE from 'three';
 const DOUBLE_TAP_MS = 320;
 const DOUBLE_TAP_DIST = 1.2;        // ワールド単位
 const HOLD_INTERVAL_MS = 40;        // 押しっぱなしで水を凹ませ続ける間隔
+const SCOOP_DELAY_MS = 420;         // これだけ押し続けると月を掬い始める
 
 /**
  * ポインタ入力。マウスとタッチの二系統をやめて Pointer Events に一本化し、
@@ -11,7 +12,16 @@ const HOLD_INTERVAL_MS = 40;        // 押しっぱなしで水を凹ませ続�
  * 払う速さで波紋の大きさと強さが変わる。速く払えば大きく崩れ、
  * そっと触ればさざなみが立つ。
  */
-export function createInput({ domElement, camera, water, state, onFirstTouch, onDoubleTap }) {
+export function createInput({
+  domElement,
+  camera,
+  water,
+  state,
+  onFirstTouch,
+  onDoubleTap,
+  onScoop,        // (x, z) 長押し中に繰り返し呼ばれる。月が指に付いてくる
+  onScoopEnd,
+}) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -82,9 +92,13 @@ export function createInput({ domElement, camera, water, state, onFirstTouch, on
     splash(point, now);
     onFirstTouch?.();
 
-    // 押しっぱなしなら、その場を凹ませ続ける（離すと表面張力で跳ね返る）
+    const downAt = performance.now();
+    // 押しっぱなしなら、その場を凹ませ続ける（離すと表面張力で跳ね返る）。
+    // さらに押し続けると月を掬い始める。
     holdTimer = setInterval(() => {
-      if (last) water.createRipple(last.x, last.z, state.water.rippleStrength * 0.32, 0.3);
+      if (!last) return;
+      water.createRipple(last.x, last.z, state.water.rippleStrength * 0.32, 0.3);
+      if (performance.now() - downAt > SCOOP_DELAY_MS) onScoop?.(last.x, last.z);
     }, HOLD_INTERVAL_MS);
   }
 
@@ -101,6 +115,7 @@ export function createInput({ domElement, camera, water, state, onFirstTouch, on
     velocity.set(0, 0);
     clearInterval(holdTimer);
     holdTimer = 0;
+    onScoopEnd?.();
     if (domElement.hasPointerCapture(event.pointerId)) {
       domElement.releasePointerCapture(event.pointerId);
     }

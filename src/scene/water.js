@@ -297,6 +297,11 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       renderer.setClearColor(prevClear, prevAlpha);
     },
 
+    /** 月が漂うので、透過ハイライトの中心も追従させる。 */
+    setMoonPosition(position) {
+      material.uniforms.uMoonPos.value.copy(position);
+    },
+
     /** ビューポートが変わった時。水面を新しい可視範囲に合わせ直す。 */
     resize() {
       world = worldSizeFor(camera);
