@@ -73,6 +73,7 @@ export const waterFragment = /* glsl */ `
   uniform float uSpecular;
   uniform float uCaustics;
   uniform float uEnergy;
+  uniform float uWindowLight;
 
   varying vec2 vUv;
   varying vec3 vWorldPos;
@@ -131,6 +132,12 @@ export const waterFragment = /* glsl */ `
 
     // --- 波の谷は少し暗く ---
     color *= 1.0 - smoothstep(0.0, -0.08, vSimHeight) * 0.15;
+
+    // --- 窓辺の光 ---
+    // 「真夜中に水槽持ち出して窓辺においた」の示唆。
+    // 窓枠のような形あるものは描かず、斜めに差し込む光だけを置く。
+    float win = 1.0 - (vScreenUV.x * 0.62 + (1.0 - vScreenUV.y) * 0.38);
+    color += uMoonColor * pow(max(win, 0.0), 2.4) * uWindowLight * 0.085;
 
     // --- 画面の縁の水際 ---
     // 器は描かないが、水が画面の縁で終わっていることは示す。

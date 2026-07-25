@@ -27,19 +27,36 @@ function shortDimensionAtMoon(camera, depth) {
  * 欠けは現在時刻・現在地から計算した本物の月相。
  * 常にゆっくり漂い、波を立てれば揺すられ、長押しすれば指に付いてくる。
  */
-export function createMoon(state, { camera }) {
+export function createMoon(state, { camera, tier }) {
   // 単位球を作って scale で大きさを決める。リサイズごとにジオメトリを作り直さない
   const geo = new THREE.SphereGeometry(1, 64, 64);
   const loader = new THREE.TextureLoader();
-  const map = loader.load('./moon.webp', (t) => {
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.generateMipmaps = true;
-    t.minFilter = THREE.LinearMipmapLinearFilter;
-    t.anisotropy = 4;
-    t.needsUpdate = true;
-  });
 
-  const mat = new THREE.ShaderMaterial({
+  // 階層ごとにテクスチャの解像度を変える。2048x1024 は RGBA 展開と
+  // ミップマップで VRAM 約10MB あり、低メモリのスマホでは無視できない。
+  let mapUrl = '';
+  let map = null;
+
+  function loadMap(url) {
+    if (url === mapUrl) return;
+    const next = loader.load(url, (t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.generateMipmaps = true;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.anisotropy = 4;
+      t.needsUpdate = true;
+    });
+    const prev = map;
+    map = next;
+    mapUrl = url;
+    if (mat) mat.uniforms.uMap.value = next;
+    prev?.dispose();
+  }
+
+  let mat = null;
+  loadMap(tier.moonTexture);
+
+  mat = new THREE.ShaderMaterial({
     uniforms: {
       uMap: { value: map },
       uSunDirView: { value: new THREE.Vector3(1, 0, 0) },
@@ -228,6 +245,11 @@ export function createMoon(state, { camera }) {
     /** ビューポートが変わった時。短辺に対する比を保つ。 */
     resize() {
       layout();
+    },
+
+    /** 性能階層でテクセル数を落とす。 */
+    applyTier(next) {
+      loadMap(next.moonTexture);
     },
 
     apply(s) {

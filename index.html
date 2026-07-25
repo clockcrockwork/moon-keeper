@@ -85,7 +85,280 @@
       opacity: 0.7;
       pointer-events: auto;
     }
-  </style>
+
+    /* ================================================
+       操作パネル
+       普段は画面端の細いタブだけ。触ると磨りガラスの板が出てくる。
+       ================================================ */
+    #panel {
+      --ink: rgba(255, 255, 255, 0.72);
+      --ink-dim: rgba(255, 255, 255, 0.42);
+      --line: rgba(255, 255, 255, 0.09);
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100%;
+      z-index: 200;
+      display: flex;
+      align-items: stretch;
+      font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+      pointer-events: none;
+    }
+    #panel-tab {
+      align-self: center;
+      width: 26px;
+      height: 92px;
+      border: none;
+      border-radius: 13px 0 0 13px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: var(--ink-dim);
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      writing-mode: vertical-rl;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: color 0.4s ease, background 0.4s ease;
+    }
+    #panel-tab:hover { color: var(--ink); background: rgba(255, 255, 255, 0.1); }
+
+    #panel-sheet {
+      width: min(310px, 84vw);
+      max-height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 18px 16px 22px;
+      background: rgba(10, 12, 18, 0.52);
+      backdrop-filter: blur(24px) saturate(1.3);
+      -webkit-backdrop-filter: blur(24px) saturate(1.3);
+      border-left: 1px solid var(--line);
+      color: var(--ink);
+      transform: translateX(100%);
+      opacity: 0;
+      transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.42s ease;
+      pointer-events: none;
+    }
+    #panel.open #panel-sheet {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #panel.open #panel-tab { color: var(--ink); }
+
+    /* プリセット */
+    #panel .presets {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    #panel .presets button {
+      position: relative;
+      padding: 7px 4px 7px 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: background 0.25s ease;
+    }
+    #panel .presets button::before {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--swatch, #fff);
+      box-shadow: 0 0 6px var(--swatch, #fff);
+    }
+    #panel .presets button:hover { background: rgba(255, 255, 255, 0.09); }
+
+    #panel .phase-note {
+      font-size: 11px;
+      color: var(--ink-dim);
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+      min-height: 1em;
+    }
+
+    /* セクション */
+    #panel details { border-top: 1px solid var(--line); }
+    #panel summary {
+      padding: 9px 2px;
+      font-size: 12px;
+      letter-spacing: 0.22em;
+      color: var(--ink-dim);
+      cursor: pointer;
+      list-style: none;
+outline: none;
+    }
+    #panel summary::-webkit-details-marker { display: none; }
+    #panel summary::before { content: "＋ "; }
+    #panel details[open] summary { color: var(--ink); }
+    #panel details[open] summary::before { content: "− "; }
+
+    /* 行 */
+    #panel .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 2px 4px 12px;
+      font-size: 11px;
+    }
+    #panel .row .name { flex: 0 0 84px; color: var(--ink-dim); letter-spacing: 0.04em; }
+    #panel .row .control { flex: 1; display: flex; align-items: center; gap: 6px; }
+    #panel .row .value {
+      flex: 0 0 40px;
+      text-align: right;
+      font-family: "Yu Gothic", sans-serif;
+      font-size: 10px;
+      color: var(--ink-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 極細のスライダー */
+    #panel input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 14px;
+      background: transparent;
+      cursor: pointer;
+    }
+    #panel input[type="range"]::-webkit-slider-runnable-track {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.22);
+    }
+    #panel input[type="range"]::-moz-range-track {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.22);
+    }
+    #panel input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 9px;
+      height: 9px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.85);
+    }
+    #panel input[type="range"]::-moz-range-thumb {
+      width: 9px;
+      height: 9px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    #panel input[type="color"] {
+      width: 34px;
+      height: 18px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      background: transparent;
+      cursor: pointer;
+    }
+    #panel input[type="color"]::-webkit-color-swatch-wrapper { padding: 1px; }
+    #panel input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+    #panel input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: rgba(255, 255, 255, 0.75);
+      cursor: pointer;
+    }
+
+    #panel .choices { gap: 4px; }
+    #panel .choices button,
+    #panel .block button,
+    #panel .actions button {
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--ink-dim);
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    #panel .choices button.on { background: rgba(255, 255, 255, 0.16); color: #fff; }
+    #panel .choices button:hover,
+    #panel .block button:hover,
+    #panel .actions button:hover { background: rgba(255, 255, 255, 0.1); color: var(--ink); }
+
+    #panel .block { padding: 6px 2px 8px 12px; }
+    #panel .block button.wide { width: 100%; padding: 6px; margin-bottom: 6px; }
+    #panel .note {
+      font-size: 10px;
+      line-height: 1.6;
+      color: var(--ink-dim);
+      white-space: pre-line;
+    }
+
+    #panel .actions {
+      display: grid;
+      gap: 6px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+    #panel .actions button { padding: 7px; }
+
+    /* スマホは下端から出す。
+       閉じているシートが高さを持つと（flex の兄弟なので）タブが画面の
+       真ん中まで押し上げられてしまうので、パネル自体の高さは 0 にして
+       タブとシートをどちらも絶対配置にする。シートの高さを固定にしておくと、
+       開いた時にタブをその上へ持ち上げる量が決まる。 */
+    @media (max-width: 640px) {
+      #panel {
+        top: auto;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        height: 0;
+        display: block;
+      }
+      #panel-tab {
+        position: absolute;
+        bottom: 0;
+        left: 14px;              /* タイトルとクレジットを避けて左下へ */
+        width: 92px;
+        height: 26px;
+        border-radius: 12px 12px 0 0;
+        writing-mode: horizontal-tb;
+        transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                    color 0.4s ease, background 0.4s ease;
+      }
+      #panel-sheet {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 62vh;
+        max-height: 62vh;
+        border-left: none;
+        border-top: 1px solid var(--line);
+        transform: translateY(100%);
+        padding-bottom: max(22px, env(safe-area-inset-bottom));
+      }
+      #panel.open #panel-sheet { transform: translateY(0); }
+      #panel.open #panel-tab { transform: translateY(-62vh); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #panel-sheet { transition: opacity 0.2s ease; }
+    }
+</style>
 </head>
 <body>
   <div id="container"></div>
@@ -95,6 +368,13 @@
   <div id="credits">
     Moon texture: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a><br>
     Repository: <a href="https://github.com/clockcrockwork/moon-keeper" target="_blank" rel="noopener">moon-keeper</a>
+  </div>
+
+  <div id="panel">
+    <button id="panel-tab" type="button" aria-expanded="false" aria-controls="panel-sheet">設 え</button>
+    <div id="panel-sheet">
+      <div id="panel-body"></div>
+    </div>
   </div>
 
   <script type="importmap">

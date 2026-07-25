@@ -3,8 +3,6 @@ import { waterVertex, waterFragment } from '../shaders/water.js';
 import { simVertex, simFragment } from '../shaders/waterSim.js';
 import { simResolution } from '../perf.js';
 
-const CREST_COLOR = new THREE.Color(0.7, 0.75, 0.9);
-
 const SPLAT_SLOTS = 8;
 
 // 水面は画面いっぱいにする。器は描かないので、端末の画面そのものが水槽の縁になる。
@@ -148,7 +146,7 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       uCameraPos: { value: camera.position.clone() },
       uMoonPos: { value: new THREE.Vector3(0, -state.moon.depth, 0) },
       uMoonColor: { value: new THREE.Color(state.moon.color) },
-      uCrestColor: { value: CREST_COLOR.clone() },
+      uCrestColor: { value: new THREE.Color(state.water.crestColor) },
       uSkyColor: { value: new THREE.Color(state.sky.color) },
 
       uHalfWorld: { value: new THREE.Vector2() },
@@ -157,6 +155,7 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       uSpecular: { value: state.water.specular },
       uCaustics: { value: state.water.caustics },
       uEnergy: { value: 0 },
+      uWindowLight: { value: state.scene.windowLight },
     },
     vertexShader: waterVertex,
     fragmentShader: waterFragment,
@@ -327,11 +326,13 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       material.uniforms.uMoonPos.value.set(0, -s.moon.depth, 0);
       material.uniforms.uMoonColor.value.set(s.moon.color);
       material.uniforms.uSkyColor.value.set(s.sky.color);
+      material.uniforms.uCrestColor.value.set(s.water.crestColor);
       material.uniforms.uSwell.value = s.water.swell;
       material.uniforms.uRefract.value = s.water.refract;
       material.uniforms.uFresnel.value = s.water.fresnel;
       material.uniforms.uSpecular.value = s.water.specular;
       material.uniforms.uCaustics.value = s.water.caustics;
+      material.uniforms.uWindowLight.value = s.scene.windowLight;
     },
 
     dispose() {

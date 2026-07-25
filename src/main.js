@@ -1,12 +1,18 @@
 import * as THREE from 'three';
 
-import { state, applyState, onStateChange } from './state.js';
+import { state, applyState, onStateChange, loadState } from './state.js';
 import { viewportSize, onViewportChange } from './viewport.js';
 import { createPerf } from './perf.js';
 import { createStarfield } from './scene/stars.js';
 import { createMoon } from './scene/moon.js';
 import { createWater } from './scene/water.js';
+import { createClock } from './scene/clock.js';
+import { createDust } from './scene/dust.js';
 import { createInput, createOverlay } from './input.js';
+import { createPanel } from './ui/panel.js';
+
+// 保存済み設定と、共有された URL ハッシュを先に読む
+loadState();
 
 // ========================================
 // レンダラー・カメラ
@@ -27,28 +33,36 @@ camera.lookAt(0, 0, 0);
 // 性能階層
 // ========================================
 const perf = createPerf(renderer, {
-  onTierChange: (settings, info) => {
+  onTierChange: (settings) => {
     renderer.setPixelRatio(perf.pixelRatio());
     resizeRenderTarget();
     water.applyTier(settings);
-    console.info(`moon-keeper: 品質を ${settings.label} に変更 (${info.reason})`);
+    starfield.applyTier(settings);
+    dust.applyTier(settings);
+    moon.applyTier(settings);
   },
 });
 renderer.setPixelRatio(perf.pixelRatio());
 
 // ========================================
-// シーン1: 月と星空（水中の世界）
+// シーン1: 月・星空・時計（水中の世界）
 // ========================================
 const underwaterScene = new THREE.Scene();
 underwaterScene.background = new THREE.Color(state.sky.color);
 
-const starfield = createStarfield(state);
+const starfield = createStarfield(state, { camera });
 underwaterScene.add(starfield.object);
 
-const moon = createMoon(state, { camera });
+const moon = createMoon(state, { camera, tier: perf.settings() });
 underwaterScene.add(moon.object);
 
-// 月と星空をテクスチャに焼くレンダーターゲット
+const clock = createClock(state, { camera });
+underwaterScene.add(clock.object);
+
+const dust = createDust(state, { camera });
+underwaterScene.add(dust.object);
+
+// 水中の世界をテクスチャに焼くレンダーターゲット
 const renderTarget = new THREE.WebGLRenderTarget(1, 1, {
   depthBuffer: true,
   stencilBuffer: false,
@@ -73,6 +87,10 @@ const water = createWater(state, {
 });
 mainScene.add(water.mesh);
 
+water.applyTier(perf.settings());
+starfield.applyTier(perf.settings());
+dust.applyTier(perf.settings());
+
 // ========================================
 // インタラクション
 // ========================================
@@ -89,13 +107,22 @@ const input = createInput({
   onScoopEnd: () => moon.release(),
 });
 
+const panel = createPanel({
+  onQualityChange: (quality) => perf.setQuality(quality),
+  onPhaseInfo: () => moon.phase,
+});
+
 onStateChange((s) => {
   underwaterScene.background.set(s.sky.color);
   starfield.apply(s);
   moon.apply(s);
   water.apply(s);
+  clock.apply(s);
+  dust.apply(s);
 });
-applyState();
+applyState({ persist: false });
+perf.setQuality(state.scene.quality);
+panel.refresh();
 
 // ========================================
 // リサイズ
@@ -112,6 +139,9 @@ onViewportChange((size) => {
   water.resize();
   // 月は画面の短辺に対する比を保つ（縦持ちで画面幅を超えないように）
   moon.resize();
+  clock.resize();
+  starfield.resize();
+  dust.resize();
 });
 
 // ========================================
@@ -119,9 +149,12 @@ onViewportChange((size) => {
 // ========================================
 // 波シミュは固定タイムステップで刻む。rAF 1回 = 1ステップにすると
 // 120Hz の端末で波が倍速になってしまう。
+const IDLE_MS = 30000;      // これだけ放置すると水が凪ぎ、タイトルがまた薄く浮かぶ
+
 let accumulator = 0;
 let lastTime = performance.now();
 let running = true;
+let idle = false;
 
 function animate(now) {
   if (!running) return;
@@ -136,10 +169,19 @@ function animate(now) {
   const settings = perf.settings();
   const stepSize = 1 / settings.stepHz;
 
+  // 放置している間は水が凪ぐので、シミュレーションを間引く（見た目に影響しない）
+  const nowIdle = water.idleMs > IDLE_MS;
+  if (nowIdle !== idle) {
+    idle = nowIdle;
+    if (idle) overlay.show();
+    else overlay.hide();
+  }
+
   accumulator += dt;
   let steps = Math.floor(accumulator / stepSize);
-  if (steps > settings.maxStepsPerFrame) {
-    steps = settings.maxStepsPerFrame;
+  const maxSteps = idle ? 1 : settings.maxStepsPerFrame;
+  if (steps > maxSteps) {
+    steps = maxSteps;
     accumulator = 0;
   } else {
     accumulator -= steps * stepSize;
@@ -154,8 +196,10 @@ function animate(now) {
   });
   // 月が漂うので、水面の透過ハイライトも一緒に動かす
   water.setMoonPosition(moon.worldPosition);
+  clock.update(moon.phase, water.energy);
+  dust.update(time, water.energy);
 
-  // 1) 月と星空をレンダーターゲットに描画
+  // 1) 水中の世界をレンダーターゲットに描画
   renderer.setRenderTarget(renderTarget);
   renderer.render(underwaterScene, camera);
 

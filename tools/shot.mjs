@@ -157,6 +157,19 @@ for (const shot of SHOTS) {
   const calmFile = path.join(OUT, `${shot.name}-calm.png`);
   await page.screenshot({ path: calmFile });
 
+  // 操作パネル。#panel=open で開いたまま固定される（自動退避が
+  // Playwright の待ち時間中に発火して閉じた状態で写るのを防ぐ）。
+  if (shot.panel !== false) {
+    const panelPage = await openPage(browser, { ...shot, hash: 'panel=open' });
+    await panelPage.page.waitForTimeout(1600);
+    await panelPage.page.evaluate(() => {
+      for (const d of document.querySelectorAll('#panel details')) d.open = true;
+    });
+    await panelPage.page.waitForTimeout(400);
+    await panelPage.page.screenshot({ path: path.join(OUT, `${shot.name}-panel.png`) });
+    await panelPage.context.close();
+  }
+
   // 画面の端の近くをドラッグする。波が縁で跳ね返るかを見たいので、
   // わざと隅に寄せる。
   const w = shot.viewport.width;
