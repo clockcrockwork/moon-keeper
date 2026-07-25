@@ -86,7 +86,8 @@ async function openPage(browser, shot) {
     problems.push(`[${shot.name}] pageerror: ${err.message}`);
   });
 
-  const url = shot.hash ? `${BASE}/#${shot.hash}` : `${BASE}/`;
+  const base = shot.url ?? BASE;
+  const url = shot.hash ? `${base}/#${shot.hash}` : `${base}/`;
   await page.goto(url, { waitUntil: 'load' });
   return { context, page };
 }
@@ -152,49 +153,103 @@ for (const shot of SHOTS) {
   if (!info.ok) problems.push(`[${shot.name}] ${info.reason}`);
   if (info.contextLost) problems.push(`[${shot.name}] WebGL コンテキストが失われた`);
 
-  // 水面を触った状態も見たいので、中央あたりをドラッグする
-  const cx = shot.viewport.width / 2;
-  const cy = shot.viewport.height / 2;
-  await page.mouse.move(cx - 60, cy - 60);
+  // 触っていない静かな水面
+  const calmFile = path.join(OUT, `${shot.name}-calm.png`);
+  await page.screenshot({ path: calmFile });
+
+  // 画面の端の近くをドラッグする。波が縁で跳ね返るかを見たいので、
+  // わざと隅に寄せる。
+  const w = shot.viewport.width;
+  const h = shot.viewport.height;
+  const sx = w * 0.28;
+  const sy = h * 0.3;
+  await page.mouse.move(sx, sy);
   await page.mouse.down();
-  for (let i = 0; i < 12; i++) {
-    await page.mouse.move(cx - 60 + i * 10, cy - 60 + i * 8);
+  for (let i = 0; i < 14; i++) {
+    await page.mouse.move(sx + i * (w * 0.03), sy + i * (h * 0.02));
     await page.waitForTimeout(16);
   }
-  await page.mouse.up();
-  await page.waitForTimeout(400);
 
+  // 触っている最中（いちばん重く、いちばん動いている状態）
   const file = path.join(OUT, `${shot.name}.png`);
   await page.screenshot({ path: file });
-  console.log(`撮影 ${file}  canvas=${info.width}x${info.height}`);
+  await page.mouse.up();
+
+  // 離してしばらく後。波が広がって縁で反射しているはず
+  await page.waitForTimeout(1100);
+  const afterFile = path.join(OUT, `${shot.name}-after.png`);
+  await page.screenshot({ path: afterFile });
+
+  console.log(`撮影 ${file} (+calm/-after)  canvas=${info.width}x${info.height}`);
 
   await context.close();
 }
 
 if (args.perf) {
-  // モバイル相当: 小さいビューポート + DPR 3 + CPU 4倍スロットリング
-  const shot = { name: 'perf', viewport: { width: 390, height: 844 }, dpr: 3 };
-  const { context, page } = await openPage(browser, shot);
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-  await page.waitForTimeout(1500);
+  // 重要な前提: この実行環境には GPU が無く、Chromium は SwiftShader
+  // （ソフトウェアラスタライザ）で描いている。フラグメントシェーダのコストが
+  // CPU に乗るので、絶対値は実機のスマホとまったく比例しない。
+  //
+  // したがって絶対値では合否を判定せず、同条件で測った基準版との「比」を見る。
+  // --baseline に main 版を配信している URL を渡すと比較する。
+  const RUNS = [
+    // 小さく DPR 1 = フラグメントの量が少なく、JS とドライバ呼び出しの差が出る
+    { name: 'cpu寄り', viewport: { width: 320, height: 640 }, dpr: 1 },
+    // スマホ相当 = フラグメント量が支配的（SwiftShader では過大に出る）
+    { name: 'fragment寄り', viewport: { width: 390, height: 844 }, dpr: 2 },
+  ];
 
-  // 触っている最中が最も重いので、押しっぱなしで測る
-  await page.mouse.move(195, 400);
-  await page.mouse.down();
-  const idle = await measure(page);
-  await page.mouse.up();
+  const gl = await (async () => {
+    const { context, page } = await openPage(browser, RUNS[0]);
+    const info = await page.evaluate(() => {
+      const c = document.querySelector('canvas');
+      const g = c?.getContext('webgl2') || c?.getContext('webgl');
+      const d = g?.getExtension('WEBGL_debug_renderer_info');
+      return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'unknown';
+    });
+    await context.close();
+    return info;
+  })();
 
-  console.log('\n性能（390x844 / DPR 3 / CPU x4 throttle）');
-  console.log(
-    `  中央値 ${idle.median.toFixed(1)}ms  p95 ${idle.p95.toFixed(1)}ms  最悪 ${idle.worst.toFixed(1)}ms`
-  );
-  const ok = idle.median <= 16.7 && idle.p95 <= 25;
-  console.log(`  目標（中央値 16.7ms / p95 25ms）: ${ok ? '達成' : '未達'}`);
-  await writeFile(path.join(OUT, 'perf.json'), JSON.stringify(idle, null, 2));
-  if (!ok) problems.push(`[perf] 中央値 ${idle.median.toFixed(1)}ms / p95 ${idle.p95.toFixed(1)}ms`);
+  const software = /swiftshader|softwarerasterizer|llvmpipe/i.test(gl);
+  console.log(`\n性能  GL: ${gl}`);
+  if (software) {
+    console.log('  ※ ソフトウェア描画なので絶対値は実機と比例しない。基準版との比だけを見る。');
+  }
 
-  await context.close();
+  async function run(url, spec) {
+    const { context, page } = await openPage(browser, { ...spec, url });
+    await page.waitForTimeout(1200);
+    // 触っている最中がいちばん重い
+    await page.mouse.move(spec.viewport.width / 2, spec.viewport.height / 2);
+    await page.mouse.down();
+    const r = await measure(page);
+    await page.mouse.up();
+    await context.close();
+    return r;
+  }
+
+  const report = { gl, software, runs: {} };
+
+  for (const spec of RUNS) {
+    const mine = await run(BASE, spec);
+    const line = [`  ${spec.name} (${spec.viewport.width}x${spec.viewport.height} @${spec.dpr})`];
+    line.push(`現在 中央値 ${mine.median.toFixed(1)}ms / p95 ${mine.p95.toFixed(1)}ms`);
+    report.runs[spec.name] = { current: mine };
+
+    if (args.baseline) {
+      const base = await run(args.baseline, spec);
+      const ratio = mine.median / base.median;
+      line.push(`基準 ${base.median.toFixed(1)}ms → 比 ${ratio.toFixed(2)}x`);
+      report.runs[spec.name].baseline = base;
+      report.runs[spec.name].ratio = ratio;
+      // 基準の2倍より遅くなったら退行とみなす
+      if (ratio > 2) problems.push(`[perf] ${spec.name} が基準の ${ratio.toFixed(2)} 倍に退行`);
+    }
+    console.log(line.join('  '));
+  }
+
+  await writeFile(path.join(OUT, 'perf.json'), JSON.stringify(report, null, 2));
 }
 
 await browser.close();
