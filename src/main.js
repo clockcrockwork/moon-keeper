@@ -102,14 +102,15 @@ const input = createInput({
   water,
   state,
   onFirstTouch: () => overlay.hide(),
-  // 長押しで月を掬う。「いとも簡単に捕獲された」
-  onScoop: (x, z) => moon.hold(x, z),
-  onScoopEnd: () => moon.release(),
+  // 水面を触っている間は設定のタブを引っ込める（クレジットと同じ考え方）
+  onInteractStart: () => panel.setInteracting(true),
+  onInteractEnd: () => panel.setInteracting(false),
 });
 
 const panel = createPanel({
   onQualityChange: (quality) => perf.setQuality(quality),
   onPhaseInfo: () => moon.phase,
+  onCalm: () => water.calm(),
 });
 
 onStateChange((s) => {

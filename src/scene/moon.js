@@ -168,13 +168,25 @@ export function createMoon(state, { camera, tier }) {
   refreshPhase();
 
   // ---- 漂い ----
-  // 互いに非整数比の周期で、決して同じ場所に戻らないように
+  // 互いに非整数比の周期で、決して同じ場所に戻らないように。
+  //
+  // 月は「空の月が水面に映っているもの」なので、自分から動き回るのはおかしい。
+  // 漂いは水面が揺れているぶんだけに留め、位置を変えたい時は
+  // state.moon.offsetX / offsetZ（パネルの「位置」）で決める。
   const worldPosition = new THREE.Vector3(0, -state.moon.depth, 0);
-  const held = new THREE.Vector2(0, 0);      // 掬われている時の目標位置
-  const heldCurrent = new THREE.Vector2(0, 0);
-  let holding = false;
   const tiltTarget = new THREE.Vector2(0, 0);
   const tilt = new THREE.Vector2(0, 0);
+
+  /** offsetX / offsetZ（-1〜1）を月の深さでのワールド座標に直す。 */
+  function offsetWorld() {
+    const h =
+      2 * (camera.position.y + state.moon.depth) *
+      Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+    return {
+      x: state.moon.offsetX * h * camera.aspect * 0.5,
+      z: state.moon.offsetZ * h * 0.5,
+    };
+  }
 
   return {
     object: group,
@@ -184,16 +196,6 @@ export function createMoon(state, { camera, tier }) {
     },
     get phase() {
       return phase;
-    },
-
-    /** 長押しで月を掬う。離すと元の位置へ漂って戻る。 */
-    hold(x, z) {
-      holding = true;
-      held.set(x, z);
-    },
-    release() {
-      holding = false;
-      held.set(0, 0);
     },
 
     update(time, { energy = 0, pointerVelocity = null, dt = 0.016 } = {}) {
@@ -212,21 +214,20 @@ export function createMoon(state, { camera, tier }) {
       const driftX = Math.sin(time / 37) * amp + Math.sin(time / 11.3) * amp * 0.25;
       const driftZ = Math.cos(time / 53) * amp + Math.cos(time / 17.7) * amp * 0.25;
 
-      // 掬われている時は指の方へゆっくり付いていく
-      heldCurrent.lerp(held, holding ? 1 - Math.pow(0.02, dt) : 1 - Math.pow(0.35, dt));
-
       // 浮き沈み。波を立てると月が揺すられる
       const bob = Math.sin(time * 0.43) * radius * 0.05 + energy * radius * 0.22;
 
-      drift.position.set(driftX + heldCurrent.x, bob, driftZ + heldCurrent.y);
+      const offset = offsetWorld();
+      drift.position.set(driftX + offset.x, bob, driftZ + offset.z);
       worldPosition.set(drift.position.x, -state.moon.depth + bob, drift.position.z);
       pivot.position.set(0, -state.moon.depth, 0);
 
-      // 払った方向に少しかしぐ
+      // 払った方向にごく僅かかしぐ（水面が傾くぶん）
       if (pointerVelocity) {
+        const cap = state.moon.tiltAmount;
         tiltTarget.set(
-          THREE.MathUtils.clamp(pointerVelocity.y * 0.012, -0.18, 0.18),
-          THREE.MathUtils.clamp(-pointerVelocity.x * 0.012, -0.18, 0.18)
+          THREE.MathUtils.clamp(pointerVelocity.y * 0.012, -cap, cap),
+          THREE.MathUtils.clamp(-pointerVelocity.x * 0.012, -cap, cap)
         );
       } else {
         tiltTarget.set(0, 0);

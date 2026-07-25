@@ -30,7 +30,12 @@ const SCHEMA = [
       { path: 'moon.glow', label: '水中の散乱', type: 'range', min: 0, max: 0.4, step: 0.005 },
       { path: 'moon.halo', label: '月縁のハロー', type: 'range', min: 0, max: 0.4, step: 0.005 },
       { path: 'moon.earthshine', label: '地球照', type: 'range', min: 0, max: 0.25, step: 0.005 },
+      // 月は「空の月が水面に映っているもの」なので掴んで動かせない。
+      // 場所を変えたい時はここから。
+      { path: 'moon.offsetX', label: '位置 横', type: 'range', min: -1, max: 1, step: 0.01 },
+      { path: 'moon.offsetZ', label: '位置 縦', type: 'range', min: -1, max: 1, step: 0.01 },
       { path: 'moon.driftAmount', label: '漂い', type: 'range', min: 0, max: 0.6, step: 0.01 },
+      { path: 'moon.tiltAmount', label: '傾き', type: 'range', min: 0, max: 0.4, step: 0.005 },
       {
         path: 'moon.phaseMode',
         label: '月相',
@@ -70,10 +75,22 @@ const SCHEMA = [
       { path: 'water.swell', label: 'うねり', type: 'range', min: 0, max: 4, step: 0.02 },
       { path: 'water.damping', label: '波の残り', type: 'range', min: 0.93, max: 0.995, step: 0.001 },
       { path: 'water.rippleStrength', label: '波紋の強さ', type: 'range', min: 0.1, max: 1.6, step: 0.02 },
+      { path: 'water.rippleRadius', label: '輪の太さ', type: 'range', min: 0.05, max: 0.5, step: 0.005 },
+      { path: 'water.ripple', label: '輪の光', type: 'range', min: 0, max: 2.5, step: 0.02 },
       { path: 'water.refract', label: '歪み', type: 'range', min: 0, max: 0.2, step: 0.002 },
       { path: 'water.fresnel', label: '反射', type: 'range', min: 0, max: 2, step: 0.02 },
       { path: 'water.specular', label: '月の透過', type: 'range', min: 0, max: 0.4, step: 0.005 },
       { path: 'water.caustics', label: '光の集束', type: 'range', min: 0, max: 4, step: 0.05 },
+      {
+        path: 'water.lightBlend',
+        label: '光の合成',
+        type: 'choice',
+        choices: [
+          [1, 'スクリーン'],
+          [0, '加算'],
+        ],
+      },
+      { type: 'calm' },
     ],
   },
   {
@@ -81,6 +98,8 @@ const SCHEMA = [
     items: [
       { path: 'sky.color', label: '夜空の色', type: 'color' },
       { path: 'scene.windowLight', label: '窓辺の光', type: 'range', min: 0, max: 1.5, step: 0.02 },
+      { path: 'scene.filterColor', label: 'フィルター色', type: 'color' },
+      { path: 'scene.colorFilter', label: 'フィルター', type: 'range', min: 0, max: 1, step: 0.01 },
       { path: 'clock.show', label: '時計', type: 'toggle' },
       { path: 'clock.seconds', label: '秒も出す', type: 'toggle', visible: () => state.clock.show },
       { path: 'clock.moonName', label: '月の和名', type: 'toggle', visible: () => state.clock.show },
@@ -114,7 +133,7 @@ const SCHEMA = [
   },
 ];
 
-export function createPanel({ onQualityChange, onPhaseInfo } = {}) {
+export function createPanel({ onQualityChange, onPhaseInfo, onCalm } = {}) {
   const root = document.getElementById('panel');
   const tab = document.getElementById('panel-tab');
   const body = document.getElementById('panel-body');
@@ -255,6 +274,23 @@ export function createPanel({ onQualityChange, onPhaseInfo } = {}) {
     return labelled(item.label, wrap);
   }
 
+  // 「水面を静める」。以前はダブルタップに割り当てていたが、連打すると必ず
+  // 成立して波紋が全部消えてしまった。意図して押す時だけ効くようにここへ移した。
+  function buildCalm() {
+    const block = document.createElement('div');
+    block.className = 'block';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wide';
+    button.textContent = '水面を静める';
+    button.addEventListener('click', () => {
+      onCalm?.();
+      scheduleHide();
+    });
+    block.append(button);
+    return block;
+  }
+
   function buildLocation() {
     const block = document.createElement('div');
     block.className = 'block';
@@ -347,6 +383,7 @@ export function createPanel({ onQualityChange, onPhaseInfo } = {}) {
         else if (item.type === 'toggle') node = buildToggle(item);
         else if (item.type === 'choice') node = buildChoice(item);
         else if (item.type === 'location') node = buildLocation();
+        else if (item.type === 'calm') node = buildCalm();
         if (!node) continue;
 
         if (item.visible) {
@@ -405,6 +442,13 @@ export function createPanel({ onQualityChange, onPhaseInfo } = {}) {
   if (pinned) openPanel();
 
   tab.addEventListener('click', () => (open ? close() : openPanel()));
+
+  // 水面を触っている間はタブを引っ込める。パネルを開いている間は消さない
+  // （パネル上の操作は canvas に届かないので、そもそもここへ来ない）。
+  function setInteracting(active) {
+    root.classList.toggle('busy', active && !open);
+  }
+
   // パネルの上での操作では自動退避のタイマーを延ばす
   root.addEventListener('pointerdown', scheduleHide);
   root.addEventListener('pointermove', () => {
@@ -414,5 +458,5 @@ export function createPanel({ onQualityChange, onPhaseInfo } = {}) {
     if (e.key === 'Escape') close();
   });
 
-  return { refresh, open: openPanel, close };
+  return { refresh, open: openPanel, close, setInteracting };
 }

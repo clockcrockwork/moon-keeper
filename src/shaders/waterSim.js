@@ -47,11 +47,17 @@ export const simFragment = /* glsl */ `
 
     // 触点のインパルス。高さを代入するのではなく速度へ加算するので、
     // ドラッグを続けると波が積み上がって自然になる。
+    //
+    // 形はメキシカンハット（ガウシアンのラプラシアン）。中心が凹み、その周りに
+    // 逆符号の縁が立つので、1タップで**複数の輪**が広がる。
+    // なめらかな円錐だと太い瘤が1つ出るだけで、「波紋」ではなく
+    // 「光の円が広がっている」ようにしか見えなかった。
     for (int i = 0; i < SPLAT_SLOTS; i++) {
       vec4 s = uSplats[i];
       float d = length((vUv - s.xy) * uWorldSize);
-      // 未使用スロットは w = 0（z は 0 にしない。edge0 == edge1 の smoothstep が壊れる）
-      v -= s.w * smoothstep(s.z, 0.0, d);
+      float sigma = max(s.z, 1e-4);
+      float q = (d * d) / (2.0 * sigma * sigma);
+      v -= s.w * (1.0 - q) * exp(-q);
     }
 
     h = clamp(h + v, -1.0, 1.0);

@@ -90,22 +90,28 @@
        操作パネル
        普段は画面端の細いタブだけ。触ると磨りガラスの板が出てくる。
        ================================================ */
+    /* パネル自体は幅を持たせない。
+       閉じているシートを flex の兄弟として並べると、シートの 310px が
+       パネルの幅に足されてタブが画面右端から 310px 内側に取り残される。
+       タブとシートをどちらも絶対配置にして、タブは常に右端へ貼り付ける。 */
     #panel {
       --ink: rgba(255, 255, 255, 0.72);
       --ink-dim: rgba(255, 255, 255, 0.42);
       --line: rgba(255, 255, 255, 0.09);
+      --sheet-w: min(310px, 84vw);
       position: fixed;
       top: 0;
       right: 0;
+      width: 0;
       height: 100%;
       z-index: 200;
-      display: flex;
-      align-items: stretch;
       font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
       pointer-events: none;
     }
     #panel-tab {
-      align-self: center;
+      position: absolute;
+      right: 0;
+      top: 50%;
       width: 26px;
       height: 92px;
       border: none;
@@ -120,13 +126,25 @@
       writing-mode: vertical-rl;
       cursor: pointer;
       pointer-events: auto;
-      transition: color 0.4s ease, background 0.4s ease;
+      transform: translateY(-50%);
+      opacity: 1;
+      transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 0.8s ease, color 0.4s ease, background 0.4s ease;
     }
     #panel-tab:hover { color: var(--ink); background: rgba(255, 255, 255, 0.1); }
 
+    /* 水面を触っている間は引っ込める（右下のクレジットと同じ考え方） */
+    #panel.busy #panel-tab {
+      opacity: 0;
+      pointer-events: none;
+    }
+
     #panel-sheet {
-      width: min(310px, 84vw);
-      max-height: 100%;
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: var(--sheet-w);
+      height: 100%;
       overflow-y: auto;
       overscroll-behavior: contain;
       padding: 18px 16px 22px;
@@ -145,7 +163,11 @@
       opacity: 1;
       pointer-events: auto;
     }
-    #panel.open #panel-tab { color: var(--ink); }
+    /* 開いたらタブはシートの縁に乗る（サイドバーが広がるイメージ） */
+    #panel.open #panel-tab {
+      color: var(--ink);
+      transform: translateY(-50%) translateX(calc(-1 * var(--sheet-w)));
+    }
 
     /* プリセット */
     #panel .presets {
@@ -314,10 +336,7 @@ outline: none;
     }
     #panel .actions button { padding: 7px; }
 
-    /* スマホは下端から出す。
-       閉じているシートが高さを持つと（flex の兄弟なので）タブが画面の
-       真ん中まで押し上げられてしまうので、パネル自体の高さは 0 にして
-       タブとシートをどちらも絶対配置にする。シートの高さを固定にしておくと、
+    /* スマホは下端から出す。シートの高さを固定にしておくと、
        開いた時にタブをその上へ持ち上げる量が決まる。 */
     @media (max-width: 640px) {
       #panel {
@@ -325,27 +344,27 @@ outline: none;
         bottom: 0;
         right: 0;
         left: 0;
+        width: auto;
         height: 0;
-        display: block;
       }
       #panel-tab {
-        position: absolute;
+        top: auto;
+        right: auto;
         bottom: 0;
         left: 14px;              /* タイトルとクレジットを避けて左下へ */
         width: 92px;
         height: 26px;
         border-radius: 12px 12px 0 0;
         writing-mode: horizontal-tb;
-        transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-                    color 0.4s ease, background 0.4s ease;
+        transform: none;
       }
       #panel-sheet {
-        position: absolute;
+        top: auto;
         bottom: 0;
         left: 0;
+        right: auto;
         width: 100%;
         height: 62vh;
-        max-height: 62vh;
         border-left: none;
         border-top: 1px solid var(--line);
         transform: translateY(100%);

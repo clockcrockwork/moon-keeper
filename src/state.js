@@ -20,7 +20,12 @@ export const defaults = {
     spin: 0.006,          // rad/秒。1周およそ17分
     earthshine: 0.05,     // 暗部に残る地球照。新月でも輪郭が消えない
     terminatorSoft: 0.07, // 明暗境界のにじみ
-    driftAmount: 0.14,    // 漂いの振幅（月の半径に対する比）
+    // 月は「空の月が水面に映っているもの」で、自分から動き回る物ではない。
+    // 漂いと傾きは水面が揺れているぶんだけに抑え、位置は下の offset で決める。
+    driftAmount: 0.05,    // 漂いの振幅（月の半径に対する比）
+    tiltAmount: 0.07,     // 払った時に傾く上限（rad）
+    offsetX: 0,           // 位置。可視範囲の半分に対する比（-1〜1）
+    offsetZ: 0,
     phaseMode: 'auto',    // 'auto' = 現在時刻から / 'manual' = スライダー
     phaseManual: 0.5,
   },
@@ -41,12 +46,19 @@ export const defaults = {
     damping: 0.97,          // 大きいほど波が長く残る
     speed: 0.45,            // 波の伝わる速さ
     rippleStrength: 0.6,    // 触った時の強さ
+    rippleRadius: 0.16,     // 波紋の芯の太さ（ワールド単位）。細いほど輪が細くなる
     swell: 1.0,             // 常時のうねり。触っていない所の「水面感」
-    refract: 0.06,          // 水中像の歪みの強さ（月相に依存させない）
+    refract: 0.032,         // 水中像の歪みの強さ（月相に依存させない）
     fresnel: 1.0,           // 波の斜面が空の暗さを返す強さ
     specular: 0.07,         // 平らな面が月を透かす明るさ（月相に連動してよい）
     caustics: 1.2,          // 波の凹みが光を集める強さ
+    ripple: 1.0,            // 波の輪の光り方（勾配由来なので細い輪になる）
     crestColor: '#b3bfe6',  // 波頭とメニスカスの色
+    // 光の合成方式。0 = 加算（元の見え方）、1 = スクリーン。
+    // 加算は明るい所で 1.0 を超えて白飛びし、隣の輪とつながって
+    // 「光の円がただ広がっている」ように見えてしまう。
+    // スクリーンは 1.0 に漸近するので輪の構造が残る。
+    lightBlend: 1.0,
     ambientStrength: 0.22,  // 自然に立つ波紋
     ambientInterval: 2600,  // ms
   },
@@ -60,6 +72,11 @@ export const defaults = {
   scene: {
     quality: 'auto',        // 'auto' | 'low' | 'mid' | 'high'
     windowLight: 0.35,      // 「窓辺においた」の示唆。光だけで器は描かない
+    // 最終段のカラーフィルター（オーバーレイ合成）。
+    // オーバーレイは下地が暗いと暗い方へ振れるので、光を足す用途には使えない。
+    // ここは月や波頭という明るい下地があるので、本来の「色を深める」働きをする。
+    colorFilter: 0.0,
+    filterColor: '#6a86c8',
   },
   sky: {
     color: '#010306',
@@ -74,7 +91,7 @@ export const PRESETS = [
     patch: {
       moon: { color: '#e6d9b3', intensity: 1.0, glow: 0.09, halo: 0.07 },
       stars: { brightness: 1.0, count: 250, color: '#bfccff', milkyWay: 0.3 },
-      water: { swell: 1.0, damping: 0.97, refract: 0.06, rippleStrength: 0.6, crestColor: '#b3bfe6' },
+      water: { swell: 1.0, damping: 0.97, refract: 0.032, rippleStrength: 0.6, crestColor: '#b3bfe6' },
       sky: { color: '#010306' },
       scene: { windowLight: 0.35 },
     },
@@ -85,7 +102,7 @@ export const PRESETS = [
     patch: {
       moon: { color: '#ffb861', intensity: 1.15, glow: 0.14, halo: 0.11 },
       stars: { brightness: 0.55, count: 160, color: '#ffd9a8', milkyWay: 0.15 },
-      water: { swell: 0.8, damping: 0.975, refract: 0.055, rippleStrength: 0.6, crestColor: '#ffcf9c' },
+      water: { swell: 0.8, damping: 0.975, refract: 0.030, rippleStrength: 0.6, crestColor: '#ffcf9c' },
       sky: { color: '#0a0603' },
       scene: { windowLight: 0.5 },
     },
@@ -96,7 +113,7 @@ export const PRESETS = [
     patch: {
       moon: { color: '#9fc4ff', intensity: 1.05, glow: 0.1, halo: 0.09 },
       stars: { brightness: 1.3, count: 380, color: '#d6e4ff', milkyWay: 0.5 },
-      water: { swell: 1.1, damping: 0.972, refract: 0.07, rippleStrength: 0.6, crestColor: '#aaccff' },
+      water: { swell: 1.1, damping: 0.972, refract: 0.038, rippleStrength: 0.6, crestColor: '#aaccff' },
       sky: { color: '#01040c' },
       scene: { windowLight: 0.25 },
     },
@@ -107,7 +124,7 @@ export const PRESETS = [
     patch: {
       moon: { color: '#d4573c', intensity: 1.2, glow: 0.16, halo: 0.13 },
       stars: { brightness: 0.4, count: 120, color: '#ffb3a0', milkyWay: 0.1 },
-      water: { swell: 0.9, damping: 0.978, refract: 0.065, rippleStrength: 0.6, crestColor: '#e08a6e' },
+      water: { swell: 0.9, damping: 0.978, refract: 0.035, rippleStrength: 0.6, crestColor: '#e08a6e' },
       sky: { color: '#0b0202' },
       scene: { windowLight: 0.2 },
     },
@@ -118,7 +135,7 @@ export const PRESETS = [
     patch: {
       moon: { color: '#fff0d9', intensity: 0.8, glow: 0.06, halo: 0.05 },
       stars: { brightness: 0.15, count: 60, color: '#ffffff', milkyWay: 0.0 },
-      water: { swell: 0.6, damping: 0.98, refract: 0.045, rippleStrength: 0.6, crestColor: '#ffe8cc' },
+      water: { swell: 0.6, damping: 0.98, refract: 0.025, rippleStrength: 0.6, crestColor: '#ffe8cc' },
       sky: { color: '#0d1016' },
       scene: { windowLight: 1.0 },
     },
@@ -129,7 +146,7 @@ export const PRESETS = [
     patch: {
       moon: { color: '#cfd6e6', intensity: 0.9, glow: 0.07, halo: 0.05 },
       stars: { brightness: 0.3, count: 90, color: '#c8d4ff', milkyWay: 0.05 },
-      water: { swell: 3.2, damping: 0.985, refract: 0.1, rippleStrength: 1.0, crestColor: '#d8e2ff' },
+      water: { swell: 3.2, damping: 0.985, refract: 0.055, rippleStrength: 1.0, crestColor: '#d8e2ff' },
       sky: { color: '#04060a' },
       scene: { windowLight: 0.15 },
     },

@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 
-const DOUBLE_TAP_MS = 320;
-const DOUBLE_TAP_DIST = 1.2;        // ワールド単位
 const HOLD_INTERVAL_MS = 40;        // 押しっぱなしで水を凹ませ続ける間隔
-const SCOOP_DELAY_MS = 420;         // これだけ押し続けると月を掬い始める
+const INTERACT_RELEASE_MS = 600;    // 離してからこれだけ経ったら「触っていない」に戻す
 
 /**
  * ポインタ入力。マウスとタッチの二系統をやめて Pointer Events に一本化し、
@@ -11,6 +9,12 @@ const SCOOP_DELAY_MS = 420;         // これだけ押し続けると月を掬�
  *
  * 払う速さで波紋の大きさと強さが変わる。速く払えば大きく崩れ、
  * そっと触ればさざなみが立つ。
+ *
+ * ここに置かないもの:
+ * - ダブルタップで水面を静める → 連打すると必ず成立して波紋が全部消えてしまう。
+ *   連打はいちばん波が溜まってほしい操作なので、静めるのはパネルのボタンへ移した。
+ * - 長押しで月を掬う → 月は「水の中の物」ではなく「空の月が水面に映っているもの」。
+ *   掴んで動かせると、その関係が壊れる。位置を変えたい時はパネルから。
  */
 export function createInput({
   domElement,
@@ -18,9 +22,8 @@ export function createInput({
   water,
   state,
   onFirstTouch,
-  onDoubleTap,
-  onScoop,        // (x, z) 長押し中に繰り返し呼ばれる。月が指に付いてくる
-  onScoopEnd,
+  onInteractStart,
+  onInteractEnd,
 }) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -29,10 +32,11 @@ export function createInput({
 
   let activeId = null;
   let last = null;                  // { x, z, t }
-  let lastTap = null;               // { x, z, t }
   let holdTimer = 0;
+  let releaseTimer = 0;
+  let interacting = false;
 
-  // 平滑化したポインタ速度。月を傾けるのに使う
+  // 平滑化したポインタ速度。月をわずかに傾けるのに使う
   const velocity = new THREE.Vector2();
 
   /**
@@ -48,6 +52,22 @@ export function createInput({
     return raycaster.ray.intersectPlane(plane, hit) ? hit : null;
   }
 
+  function beginInteract() {
+    clearTimeout(releaseTimer);
+    if (interacting) return;
+    interacting = true;
+    onInteractStart?.();
+  }
+
+  function endInteract() {
+    // 指を上げた瞬間に戻すとチラつくので、少し置いてから
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(() => {
+      interacting = false;
+      onInteractEnd?.();
+    }, INTERACT_RELEASE_MS);
+  }
+
   function splash(point, now) {
     let speed = 0;
     if (last) {
@@ -59,7 +79,7 @@ export function createInput({
 
     // 速く払うほど大きく、強く崩れる
     const t = Math.min(speed / 14, 1);
-    const radius = 0.22 + t * 0.5;
+    const radius = state.water.rippleRadius * (1 + t * 1.6);
     const strength = state.water.rippleStrength * (0.55 + t * 1.1);
     water.createRipple(point.x, point.z, strength, radius);
   }
@@ -71,34 +91,22 @@ export function createInput({
     const point = toWorld(event);
     if (!point) return;
 
-    const now = event.timeStamp || performance.now();
-
-    // ダブルタップで水面を静める
-    if (
-      lastTap &&
-      now - lastTap.t < DOUBLE_TAP_MS &&
-      Math.hypot(point.x - lastTap.x, point.z - lastTap.z) < DOUBLE_TAP_DIST
-    ) {
-      water.calm();
-      lastTap = null;
-      onDoubleTap?.();
-      return;
-    }
-    lastTap = { x: point.x, z: point.z, t: now };
-
     activeId = event.pointerId;
     domElement.setPointerCapture(event.pointerId);
     last = null;
-    splash(point, now);
+    beginInteract();
+    splash(point, event.timeStamp || performance.now());
     onFirstTouch?.();
 
-    const downAt = performance.now();
-    // 押しっぱなしなら、その場を凹ませ続ける（離すと表面張力で跳ね返る）。
-    // さらに押し続けると月を掬い始める。
+    // 押しっぱなしなら、その場を凹ませ続ける（離すと表面張力で跳ね返る）
     holdTimer = setInterval(() => {
       if (!last) return;
-      water.createRipple(last.x, last.z, state.water.rippleStrength * 0.32, 0.3);
-      if (performance.now() - downAt > SCOOP_DELAY_MS) onScoop?.(last.x, last.z);
+      water.createRipple(
+        last.x,
+        last.z,
+        state.water.rippleStrength * 0.32,
+        state.water.rippleRadius * 1.3
+      );
     }, HOLD_INTERVAL_MS);
   }
 
@@ -115,7 +123,7 @@ export function createInput({
     velocity.set(0, 0);
     clearInterval(holdTimer);
     holdTimer = 0;
-    onScoopEnd?.();
+    endInteract();
     if (domElement.hasPointerCapture(event.pointerId)) {
       domElement.releasePointerCapture(event.pointerId);
     }
@@ -134,6 +142,7 @@ export function createInput({
     },
     dispose() {
       clearInterval(holdTimer);
+      clearTimeout(releaseTimer);
       domElement.removeEventListener('pointerdown', onPointerDown);
       domElement.removeEventListener('pointermove', onPointerMove);
       domElement.removeEventListener('pointerup', onPointerUp);

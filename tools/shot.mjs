@@ -157,23 +157,83 @@ for (const shot of SHOTS) {
   const calmFile = path.join(OUT, `${shot.name}-calm.png`);
   await page.screenshot({ path: calmFile });
 
-  // 操作パネル。#panel=open で開いたまま固定される（自動退避が
-  // Playwright の待ち時間中に発火して閉じた状態で写るのを防ぐ）。
-  if (shot.panel !== false) {
-    const panelPage = await openPage(browser, { ...shot, hash: 'panel=open' });
-    await panelPage.page.waitForTimeout(1600);
-    await panelPage.page.evaluate(() => {
-      for (const d of document.querySelectorAll('#panel details')) d.open = true;
+  // 設定タブが画面の端に接しているか。
+  // 閉じているシートが幅を持つとタブが画面内側に取り残されるので、そこを見張る。
+  {
+    const tab = await page.evaluate(() => {
+      const r = document.getElementById('panel-tab').getBoundingClientRect();
+      return { right: r.right, bottom: r.bottom, w: innerWidth, h: innerHeight };
     });
-    await panelPage.page.waitForTimeout(400);
-    await panelPage.page.screenshot({ path: path.join(OUT, `${shot.name}-panel.png`) });
-    await panelPage.context.close();
+    const mobile = shot.viewport.width <= 640;
+    // モバイルは下端、PC は右端に貼り付く
+    const gap = mobile ? Math.abs(tab.bottom - tab.h) : Math.abs(tab.right - tab.w);
+    if (gap > 2) {
+      problems.push(
+        `[${shot.name}] 設定タブが${mobile ? '下' : '右'}端から ${gap.toFixed(0)}px 離れている`
+      );
+    }
+  }
+
+  const w = shot.viewport.width;
+  const h = shot.viewport.height;
+
+  // 連打しても波紋が消えないこと。
+  // 以前はダブルタップが water.calm() に割り当たっていて、連打すると必ず
+  // 成立して全部消えていた。同じ場所を6回叩いて波が残っているかを見る。
+  {
+    const cx = w * 0.5;
+    const cy = h * 0.42;
+    for (let i = 0; i < 6; i++) {
+      await page.mouse.click(cx, cy);
+      await page.waitForTimeout(90);
+    }
+    await page.waitForTimeout(260);
+    await page.screenshot({ path: path.join(OUT, `${shot.name}-taps.png`) });
+
+    // 触っている間はタブが引っ込むか。
+    //
+    // ここで見るのは `busy` クラスの付け外しだけにする。opacity の実測値は
+    // 当てにならない: タブは backdrop-filter を持つのでコンポジタ側で
+    // アニメーションし、SwiftShader で描画が渋滞していると
+    // getComputedStyle が古い値（1）を返すことがある。
+    // 実際に消えているかは触っている最中のスクリーンショットで目で見る。
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    const busyWhileDown = await page.evaluate(() =>
+      document.getElementById('panel').classList.contains('busy')
+    );
+    await page.mouse.up();
+    if (!busyWhileDown) {
+      problems.push(`[${shot.name}] 触っている間もタブが引っ込まない`);
+    }
+
+    // 離したら戻るか（600ms 後に解除 → さらにフェードイン）
+    await page.waitForTimeout(1600);
+    const busyAfterUp = await page.evaluate(() =>
+      document.getElementById('panel').classList.contains('busy')
+    );
+    if (busyAfterUp) {
+      problems.push(`[${shot.name}] 離してもタブが戻らない`);
+    }
+  }
+
+  // 1タップの輪が細く分かれて広がっていくか、時系列で3枚
+  {
+    await page.mouse.click(w * 0.34, h * 0.34);
+    for (const [ms, tag] of [
+      [380, 'ring1'],
+      [700, 'ring2'],
+      [900, 'ring3'],
+    ]) {
+      await page.waitForTimeout(ms);
+      await page.screenshot({ path: path.join(OUT, `${shot.name}-${tag}.png`) });
+    }
+    await page.waitForTimeout(1400);
   }
 
   // 画面の端の近くをドラッグする。波が縁で跳ね返るかを見たいので、
   // わざと隅に寄せる。
-  const w = shot.viewport.width;
-  const h = shot.viewport.height;
   const sx = w * 0.28;
   const sy = h * 0.3;
   await page.mouse.move(sx, sy);
@@ -193,9 +253,26 @@ for (const shot of SHOTS) {
   const afterFile = path.join(OUT, `${shot.name}-after.png`);
   await page.screenshot({ path: afterFile });
 
-  console.log(`撮影 ${file} (+calm/-after)  canvas=${info.width}x${info.height}`);
-
   await context.close();
+
+  // 操作パネルは本体のページを閉じてから別ページで撮る。
+  // SwiftShader で WebGL のコンテキストを2つ同時に回すと描画が渋滞して
+  // スクリーンショットがタイムアウトする。
+  //
+  // #panel=open で開いたまま固定される（自動退避が Playwright の待ち時間中に
+  // 発火して、閉じた状態で写ってしまうのを防ぐ）。
+  if (shot.panel !== false) {
+    const panelPage = await openPage(browser, { ...shot, hash: 'panel=open' });
+    await panelPage.page.waitForTimeout(1600);
+    await panelPage.page.evaluate(() => {
+      for (const d of document.querySelectorAll('#panel details')) d.open = true;
+    });
+    await panelPage.page.waitForTimeout(400);
+    await panelPage.page.screenshot({ path: path.join(OUT, `${shot.name}-panel.png`) });
+    await panelPage.context.close();
+  }
+
+  console.log(`撮影 ${file} (+calm/-taps/-ring1..3/-after/-panel)  canvas=${info.width}x${info.height}`);
 }
 
 if (args.perf) {

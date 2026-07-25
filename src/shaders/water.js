@@ -72,8 +72,28 @@ export const waterFragment = /* glsl */ `
   uniform float uFresnel;
   uniform float uSpecular;
   uniform float uCaustics;
-  uniform float uEnergy;
+  uniform float uRipple;
+  uniform float uLightBlend;
   uniform float uWindowLight;
+  uniform float uColorFilter;
+  uniform vec3 uFilterColor;
+
+  // 光を「足す」のではなく「乗せる」。
+  //
+  // 素の加算は明るい所で 1.0 を超えて白飛びし、隣り合う波の輪が
+  // つながって一枚の光の円に見えてしまう。スクリーンは 1.0 に漸近するので
+  // 輪の構造が残る。uLightBlend で 加算(0) ↔ スクリーン(1) を混ぜられる。
+  vec3 addLight(vec3 base, vec3 light) {
+    vec3 screen = 1.0 - (1.0 - clamp(base, 0.0, 1.0)) * (1.0 - clamp(light, 0.0, 1.0));
+    return mix(base + light, screen, uLightBlend);
+  }
+
+  // オーバーレイ。下地が暗いと暗い方へ振れるので光を足すのには使えないが、
+  // 明るい下地（月・波頭）の色を深めるカラーフィルターとしては本来の働きをする。
+  vec3 blendOverlay(vec3 base, vec3 layer) {
+    vec3 b = clamp(base, 0.0, 1.0);
+    return mix(2.0 * b * layer, 1.0 - 2.0 * (1.0 - b) * (1.0 - layer), step(0.5, b));
+  }
 
   varying vec2 vUv;
   varying vec3 vWorldPos;
@@ -110,24 +130,34 @@ export const waterFragment = /* glsl */ `
     // 透過の関係なので、これで正しい向きになる。
     vec3 L = normalize(uMoonPos - vWorldPos);
     float through = pow(max(dot(N, normalize(V - L)), 0.0), 64.0);
-    color += uMoonColor * through * uSpecular;
+    color = addLight(color, uMoonColor * through * uSpecular);
 
-    // --- 波頭（Interaction-driven。常に見える） ---
-    color += uCrestColor * smoothstep(0.01, 0.06, vSimHeight) * 0.45;
-
-    // 触った直後だけ乗る補助光。新月でも「触った」ことが必ず返る
-    color += uCrestColor * uEnergy * smoothstep(0.02, 0.10, abs(vSimHeight)) * 0.20;
+    // --- 波の輪（Interaction-driven。常に見える） ---
+    //
+    // 光は高さではなく**勾配**で出す。高さで出すと波の山の広い平坦部が
+    // 丸ごと光って塗りつぶした円盤になり、「波紋」ではなく
+    // 「広がる光の円」に見えてしまう。斜面は波front の前後にしか立たないので、
+    // 勾配で出せば細い輪になる。
+    // 閾値は高めに取る。低いと「傾きがそこそこある広い領域」が丸ごと光って
+    // 青い煙のようになり、輪に見えない。急な波front だけを拾う。
+    float slope = length(sim.zw) * uHeightScale;
+    float ring = smoothstep(0.10, 0.42, slope);
+    // 山側をやや強くして、輪に向きを与える（のっぺりした二重線にしない）
+    float facing = 0.6 + 0.4 * smoothstep(-0.04, 0.04, vSimHeight);
+    color = addLight(color, uCrestColor * ring * facing * 0.30 * uRipple);
 
     // --- うねりの微かな煌めき（触った波紋を埋もれさせないよう控えめに） ---
-    color += uCrestColor * smoothstep(0.004, 0.016, vSwell) * 0.05;
+    float swellSlope = length(vSwellGrad);
+    color = addLight(color, uCrestColor * smoothstep(0.01, 0.05, swellSlope) * 0.06);
 
   #ifdef CAUSTICS
     // 波の凹みが光を集める。書き出しておいた勾配の発散（前進差分）を使うので、
     // 近傍の高さを4回引くより半分の2フェッチで済む。
+    // 曲率由来なので元から細く、輪の芯として効く。
     vec2 gx = texture2D(uSim, vUv + vec2(uSimTexel.x, 0.0)).zw;
     vec2 gz = texture2D(uSim, vUv + vec2(0.0, uSimTexel.y)).zw;
     float divergence = (gx.x - sim.z) + (gz.y - sim.w);
-    color += uMoonColor * max(divergence, 0.0) * uCaustics;
+    color = addLight(color, uMoonColor * max(divergence, 0.0) * uCaustics);
   #endif
 
     // --- 波の谷は少し暗く ---
@@ -137,7 +167,11 @@ export const waterFragment = /* glsl */ `
     // 「真夜中に水槽持ち出して窓辺においた」の示唆。
     // 窓枠のような形あるものは描かず、斜めに差し込む光だけを置く。
     float win = 1.0 - (vScreenUV.x * 0.62 + (1.0 - vScreenUV.y) * 0.38);
-    color += uMoonColor * pow(max(win, 0.0), 2.4) * uWindowLight * 0.085;
+    color = addLight(color, uMoonColor * pow(max(win, 0.0), 2.4) * uWindowLight * 0.085);
+
+    // --- カラーフィルター（オーバーレイ） ---
+    // 月と波頭という明るい下地に対して色を深める。暗部はほぼ動かない。
+    color = mix(color, blendOverlay(color, uFilterColor), uColorFilter);
 
     // --- 画面の縁の水際 ---
     // 器は描かないが、水が画面の縁で終わっていることは示す。
@@ -145,7 +179,10 @@ export const waterFragment = /* glsl */ `
     vec2 toEdge = uHalfWorld - abs(vWorldPos.xz);
     float edge = min(toEdge.x, toEdge.y);
     color *= 1.0 - smoothstep(0.34, 0.0, edge) * 0.32;
-    color += uCrestColor * smoothstep(0.16, 0.34, edge) * smoothstep(0.78, 0.40, edge) * 0.05;
+    color = addLight(
+      color,
+      uCrestColor * smoothstep(0.16, 0.34, edge) * smoothstep(0.78, 0.40, edge) * 0.05
+    );
 
     gl_FragColor = vec4(color, 1.0);
   }

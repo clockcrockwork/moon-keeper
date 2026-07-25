@@ -154,7 +154,10 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       uFresnel: { value: state.water.fresnel },
       uSpecular: { value: state.water.specular },
       uCaustics: { value: state.water.caustics },
-      uEnergy: { value: 0 },
+      uRipple: { value: state.water.ripple },
+      uLightBlend: { value: state.water.lightBlend },
+      uColorFilter: { value: state.scene.colorFilter },
+      uFilterColor: { value: new THREE.Color(state.scene.filterColor) },
       uWindowLight: { value: state.scene.windowLight },
     },
     vertexShader: waterVertex,
@@ -240,7 +243,8 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
     /** 固定タイムステップで steps 回進める。 */
     step(steps, time) {
       material.uniforms.uTime.value = time;
-      material.uniforms.uEnergy.value = energy;
+      // energy は水面シェーダでは使わない（触った応答は勾配由来の輪が担う）。
+      // 月の揺れ・水中の塵・時計の濃さへ配る。
       energy *= 0.94;
 
       if (!simEnabled) return;
@@ -269,7 +273,7 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
      * 波紋を起こす。radius はワールド単位。
      * 高さを代入するのではなく速度へ加算するので、ドラッグを続けると波が積み上がる。
      */
-    createRipple(wx, wz, strength = state.water.rippleStrength, radius = 0.45) {
+    createRipple(wx, wz, strength = state.water.rippleStrength, radius = state.water.rippleRadius) {
       const { u, v } = worldToUv(wx, wz);
       if (u < -0.1 || u > 1.1 || v < -0.1 || v > 1.1) return;
       // 1ステップぶんのインパルス。ドラッグ中は毎フレーム積み上がるので控えめに
@@ -332,7 +336,11 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       material.uniforms.uFresnel.value = s.water.fresnel;
       material.uniforms.uSpecular.value = s.water.specular;
       material.uniforms.uCaustics.value = s.water.caustics;
+      material.uniforms.uRipple.value = s.water.ripple;
+      material.uniforms.uLightBlend.value = s.water.lightBlend;
       material.uniforms.uWindowLight.value = s.scene.windowLight;
+      material.uniforms.uColorFilter.value = s.scene.colorFilter;
+      material.uniforms.uFilterColor.value.set(s.scene.filterColor);
     },
 
     dispose() {
