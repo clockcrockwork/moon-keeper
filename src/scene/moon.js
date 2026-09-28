@@ -28,6 +28,13 @@ function shortDimensionAtMoon(camera, depth) {
  * 常にゆっくり漂い、波を立てれば揺すられ、長押しすれば指に付いてくる。
  */
 export function createMoon(state, { camera, tier }) {
+  // 描画の置き場は2つある。
+  //
+  //   object … 水中に散乱した月明かりのにじみ。水中の世界と一緒に描いて屈折させる
+  //   layer  … 月の円盤とハロー。「空の月が水面に映ったもの」なので水中には置かず、
+  //            自前の小さなレンダーターゲットに描いて、水面シェーダが屈折させずに
+  //            水面の上へ合成する。水の中の物のように波でにゅるっと歪まないため。
+  //
   // 単位球を作って scale で大きさを決める。リサイズごとにジオメトリを作り直さない
   const geo = new THREE.SphereGeometry(1, 64, 64);
   const loader = new THREE.TextureLoader();
@@ -114,9 +121,26 @@ export function createMoon(state, { camera, tier }) {
   const halo = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), haloMat);
 
   const group = new THREE.Group();
-  group.add(drift);
   group.add(scatter);
-  group.add(halo);
+
+  // 反射レイヤー。月の円盤とハローだけの独立したシーン
+  const layer = new THREE.Scene();
+  layer.add(drift);
+  layer.add(halo);
+
+  // 反射レイヤーの描画先。画面全体ではなく、月とハローが収まる矩形だけを
+  // メインカメラの部分視野（setViewOffset）で描く。VRAM は全画面ターゲットの
+  // 1/6 ほどで済み、遠近もメインの絵と厳密に一致する。
+  const layerTarget = new THREE.WebGLRenderTarget(1, 1, {
+    depthBuffer: false,
+    stencilBuffer: false,
+    generateMipmaps: false,
+  });
+  // 矩形の位置と大きさ。画面 uv（左下原点、0〜1）で xy = 左下、zw = 幅と高さ
+  const layerRect = new THREE.Vector4(0, 0, 1, 1);
+  const layerSize = new THREE.Vector2();
+  const projected = new THREE.Vector3();
+  const clearColor = new THREE.Color();
 
   let radius = 1;
 
@@ -188,9 +212,54 @@ export function createMoon(state, { camera, tier }) {
     };
   }
 
+  /**
+   * 月の円盤とハローを反射レイヤーへ描く。毎フレーム、水中の世界より前に呼ぶ。
+   * 矩形はハローの板（半径の 2.4 倍）が収まる大きさに、僅かな余白を足したもの。
+   */
+  function renderLayer(renderer) {
+    renderer.getDrawingBufferSize(layerSize);
+    const W = layerSize.x;
+    const H = layerSize.y;
+
+    // 月の中心の画面位置と、月までの距離での半サイズ（NDC）
+    projected.copy(worldPosition).project(camera);
+    const dist = camera.position.y - worldPosition.y;
+    const halfWorld = radius * 2.4 * 1.06;
+    const halfNdcY = halfWorld / (dist * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)));
+    const halfNdcX = halfNdcY / camera.aspect;
+
+    // ピクセルの矩形（左上原点）。整数に丸めてターゲットと 1:1 にする
+    const x0 = Math.floor((projected.x - halfNdcX) * 0.5 * W + 0.5 * W);
+    const y0 = Math.floor((-projected.y - halfNdcY) * 0.5 * H + 0.5 * H);
+    const w = Math.max(1, Math.ceil(halfNdcX * W));
+    const h = Math.max(1, Math.ceil(halfNdcY * H));
+
+    if (layerTarget.width !== w || layerTarget.height !== h) layerTarget.setSize(w, h);
+
+    // 画面 uv での矩形（左下原点）
+    layerRect.set(x0 / W, 1 - (y0 + h) / H, w / W, h / H);
+
+    const prevTarget = renderer.getRenderTarget();
+    renderer.getClearColor(clearColor);
+    const prevAlpha = renderer.getClearAlpha();
+
+    camera.setViewOffset(W, H, x0, y0, w, h);
+    renderer.setClearColor(0x000000, 0);
+    renderer.setRenderTarget(layerTarget);
+    renderer.render(layer, camera);
+    camera.clearViewOffset();
+
+    renderer.setRenderTarget(prevTarget);
+    renderer.setClearColor(clearColor, prevAlpha);
+  }
+
   return {
     object: group,
     worldPosition,
+    /** 反射レイヤーのテクスチャと、その画面上の矩形（水面シェーダが合成に使う） */
+    layerTexture: layerTarget.texture,
+    layerRect,
+    renderLayer,
     get radius() {
       return radius;
     },
@@ -272,6 +341,7 @@ export function createMoon(state, { camera, tier }) {
       scatterMat.dispose();
       halo.geometry.dispose();
       haloMat.dispose();
+      layerTarget.dispose();
     },
   };
 }

@@ -78,6 +78,7 @@ const SCHEMA = [
       { path: 'water.rippleRadius', label: '輪の太さ', type: 'range', min: 0.05, max: 0.5, step: 0.005 },
       { path: 'water.ripple', label: '輪の光', type: 'range', min: 0, max: 2.5, step: 0.02 },
       { path: 'water.refract', label: '歪み', type: 'range', min: 0, max: 0.2, step: 0.002 },
+      { path: 'water.moonBreak', label: '月の反射の割れ', type: 'range', min: 0, max: 1, step: 0.02 },
       { path: 'water.fresnel', label: '反射', type: 'range', min: 0, max: 2, step: 0.02 },
       { path: 'water.specular', label: '月の透過', type: 'range', min: 0, max: 0.4, step: 0.005 },
       { path: 'water.caustics', label: '光の集束', type: 'range', min: 0, max: 4, step: 0.05 },

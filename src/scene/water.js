@@ -46,7 +46,7 @@ function pickFloatType(renderer) {
  *
  * 公開 API: { mesh, step, createRipple, calm, energy, resize, applyTier, apply, dispose }
  */
-export function createWater(state, { renderer, camera, underwaterTexture, tier }) {
+export function createWater(state, { renderer, camera, underwaterTexture, moonLayer, tier }) {
   const floatType = pickFloatType(renderer);
   const simEnabled = floatType !== null;
   if (!simEnabled) {
@@ -138,6 +138,9 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
     uniforms: {
       uSim: { value: zeroTexture },
       uUnderwater: { value: underwaterTexture },
+      uMoonLayer: { value: moonLayer.texture },
+      uMoonRect: { value: moonLayer.rect },
+      uInvResolution: { value: new THREE.Vector2(1, 1) },
       uSimTexel: { value: new THREE.Vector2() },
       uHeightScale: { value: 0.4 },
       uSwell: { value: state.water.swell },
@@ -155,6 +158,7 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       uSpecular: { value: state.water.specular },
       uCaustics: { value: state.water.caustics },
       uRipple: { value: state.water.ripple },
+      uMoonBreak: { value: state.water.moonBreak },
       uLightBlend: { value: state.water.lightBlend },
       uColorFilter: { value: state.scene.colorFilter },
       uFilterColor: { value: new THREE.Color(state.scene.filterColor) },
@@ -221,6 +225,8 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
     return splatQueue.length;
   }
 
+  const drawingSize = new THREE.Vector2();
+
   // 触ったエネルギー。月の揺れと、月相に依存しないフィードバック光に配る
   let energy = 0;
   // 放置検出用
@@ -243,6 +249,9 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
     /** 固定タイムステップで steps 回進める。 */
     step(steps, time) {
       material.uniforms.uTime.value = time;
+      // gl_FragCoord から画面 uv を出すのに使う（月の反射は屈折させずにここで拾う）
+      renderer.getDrawingBufferSize(drawingSize);
+      material.uniforms.uInvResolution.value.set(1 / drawingSize.x, 1 / drawingSize.y);
       // energy は水面シェーダでは使わない（触った応答は勾配由来の輪が担う）。
       // 月の揺れ・水中の塵・時計の濃さへ配る。
       energy *= 0.94;
@@ -337,6 +346,7 @@ export function createWater(state, { renderer, camera, underwaterTexture, tier }
       material.uniforms.uSpecular.value = s.water.specular;
       material.uniforms.uCaustics.value = s.water.caustics;
       material.uniforms.uRipple.value = s.water.ripple;
+      material.uniforms.uMoonBreak.value = s.water.moonBreak;
       material.uniforms.uLightBlend.value = s.water.lightBlend;
       material.uniforms.uWindowLight.value = s.scene.windowLight;
       material.uniforms.uColorFilter.value = s.scene.colorFilter;
