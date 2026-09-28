@@ -22,8 +22,7 @@ export const defaults = {
     terminatorSoft: 0.07, // 明暗境界のにじみ
     // 月は「空の月が水面に映っているもの」で、自分から動き回る物ではない。
     // 漂いと傾きは水面が揺れているぶんだけに抑え、位置は下の offset で決める。
-    driftAmount: 0.05,    // 漂いの振幅（月の半径に対する比）
-    tiltAmount: 0.07,     // 払った時に傾く上限（rad）
+    driftAmount: 0.05,    // 漂いの振幅（月の半径に対する比）。触っても月は動かない
     offsetX: 0,           // 位置。可視範囲の半分に対する比（-1〜1）
     offsetZ: 0,
     phaseMode: 'auto',    // 'auto' = 現在時刻から / 'manual' = スライダー

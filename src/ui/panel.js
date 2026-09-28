@@ -35,7 +35,6 @@ const SCHEMA = [
       { path: 'moon.offsetX', label: '位置 横', type: 'range', min: -1, max: 1, step: 0.01 },
       { path: 'moon.offsetZ', label: '位置 縦', type: 'range', min: -1, max: 1, step: 0.01 },
       { path: 'moon.driftAmount', label: '漂い', type: 'range', min: 0, max: 0.6, step: 0.01 },
-      { path: 'moon.tiltAmount', label: '傾き', type: 'range', min: 0, max: 0.4, step: 0.005 },
       {
         path: 'moon.phaseMode',
         label: '月相',
