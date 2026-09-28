@@ -53,7 +53,6 @@ underwaterScene.background = new THREE.Color(state.sky.color);
 const starfield = createStarfield(state, { camera });
 underwaterScene.add(starfield.object);
 
-// 月の円盤とハローは水中には置かない（moon.js 参照）。水中に入るのは散乱光だけ
 const moon = createMoon(state, { camera, tier: perf.settings() });
 underwaterScene.add(moon.object);
 
@@ -84,7 +83,6 @@ const water = createWater(state, {
   renderer,
   camera,
   underwaterTexture: renderTarget.texture,
-  moonLayer: { texture: moon.layerTexture, rect: moon.layerRect },
   tier: perf.settings(),
 });
 mainScene.add(water.mesh);
@@ -202,14 +200,11 @@ function animate(now) {
   clock.update(moon.phase, water.energy);
   dust.update(time, water.energy);
 
-  // 1) 月の反射レイヤー（月の円盤とハロー）を小さなターゲットに描画
-  moon.renderLayer(renderer);
-
-  // 2) 水中の世界をレンダーターゲットに描画
+  // 1) 水中の世界をレンダーターゲットに描画
   renderer.setRenderTarget(renderTarget);
   renderer.render(underwaterScene, camera);
 
-  // 3) 水面をメインに描画
+  // 2) 水面をメインに描画
   renderer.setRenderTarget(null);
   renderer.render(mainScene, camera);
 }

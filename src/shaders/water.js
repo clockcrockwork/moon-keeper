@@ -56,9 +56,6 @@ export const waterVertex = /* glsl */ `
 export const waterFragment = /* glsl */ `
   uniform sampler2D uSim;
   uniform sampler2D uUnderwater;
-  uniform sampler2D uMoonLayer;
-  uniform vec4 uMoonRect;        // 月の反射レイヤーの画面上の矩形。xy = 左下、zw = 幅高さ
-  uniform vec2 uInvResolution;
   uniform vec2 uSimTexel;
   uniform float uHeightScale;
   uniform float uSwell;
@@ -76,7 +73,6 @@ export const waterFragment = /* glsl */ `
   uniform float uSpecular;
   uniform float uCaustics;
   uniform float uRipple;
-  uniform float uMoonBreak;
   uniform float uLightBlend;
   uniform float uWindowLight;
   uniform float uColorFilter;
@@ -126,22 +122,6 @@ export const waterFragment = /* glsl */ `
     // 反射側に振れる。夜なので反射して返るのは空の暗さで、斜面が暗く沈む。
     float fresnel = mix(0.02, 1.0, pow(1.0 - max(dot(N, V), 0.0), 5.0)) * uFresnel;
     vec3 color = mix(underwater, uSkyColor, fresnel);
-
-    // --- 月の反射（水面の上の像。屈折させない） ---
-    //
-    // 月は水の中にある物ではなく、空の月が水面に映ったもの。だから水中の像と
-    // 一緒に屈折させると、触るたびに月そのものがにゅるっと歪んで
-    // 「水の中に月が居る」ように見えてしまう。
-    // 像の位置は動かさず、代わりに波の斜面が月明かりを目からそらすぶんだけ
-    // 反射を暗くする。輪が月を横切ると、そこだけ像が割れて水の中が透ける。
-    // 画面 uv は補間された varying ではなく gl_FragCoord から取り、頂点の
-    // 上下でも像が微塵も揺れないようにする。
-    vec2 screen = gl_FragCoord.xy * uInvResolution;
-    vec2 moonUv = (screen - uMoonRect.xy) / uMoonRect.zw;
-    vec2 insideXY = step(vec2(0.0), moonUv) * step(moonUv, vec2(1.0));
-    vec3 moonImage = texture2D(uMoonLayer, clamp(moonUv, 0.0, 1.0)).rgb * insideXY.x * insideXY.y;
-    float mirror = 1.0 - smoothstep(0.04, 0.30, length(grad)) * uMoonBreak;
-    color += moonImage * mirror;
 
     // --- 月明かりの透過（Moon-driven） ---
     // 注意: ここは意図的に V - L。月は水面の「下」にあるため L はほぼ -Y、
