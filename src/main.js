@@ -190,12 +190,9 @@ function animate(now) {
 
   water.step(steps, time);
   starfield.update(time);
-  moon.update(time, {
-    energy: water.energy,
-    pointerVelocity: input.isDown ? input.velocity : null,
-    dt,
-  });
-  // 月が漂うので、水面の透過ハイライトも一緒に動かす
+  // 月は触っても動かない（moon.js 参照）。energy はここには渡さない
+  moon.update(time);
+  // 月がゆっくり漂うので、水面の透過ハイライトも一緒に動かす
   water.setMoonPosition(moon.worldPosition);
   clock.update(moon.phase, water.energy);
   dust.update(time, water.energy);
