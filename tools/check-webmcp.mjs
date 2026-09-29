@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { createWebMCPTools, validateScenePatch } from '../src/webmcp.js';
+import { createWebMCPTools, registerWebMCP, validateScenePatch } from '../src/webmcp.js';
 import { getPath, resetState } from '../src/state.js';
 
 globalThis.location = { origin: 'https://example.test', pathname: '/' };
@@ -68,6 +68,25 @@ assert.match(stateResult.shareUrl, /^https:\/\/example\.test\//);
 await byName.get('apply_moon_keeper_preset').execute({ preset: 'amber' });
 assert.equal(getPath('moon.intensity'), 1.15);
 assert.equal(refreshCount, 2);
+
+const registered = [];
+globalThis.document = {
+  modelContext: {
+    registerTool: async (tool, options) => {
+      registered.push({ name: tool.name, signal: options?.signal });
+    },
+  },
+};
+
+const registration = await registerWebMCP();
+assert.equal(registration.supported, true);
+assert.equal(registration.toolCount, 4);
+assert.equal(registered.length, 4);
+assert.ok(registered.every(({ signal }) => signal instanceof AbortSignal && !signal.aborted));
+
+registration.unregister();
+assert.ok(registered.every(({ signal }) => signal.aborted));
+delete globalThis.document;
 
 resetState();
 console.log('WebMCP checks passed');
