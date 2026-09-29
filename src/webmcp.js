@@ -90,7 +90,13 @@ function schemaFor(spec) {
     };
   }
   if (spec.type === 'boolean') return { type: 'boolean', description: spec.description };
-  if (spec.type === 'enum') return { enum: spec.values, description: spec.description };
+  if (spec.type === 'enum') {
+    return {
+      type: typeof spec.values[0] === 'number' ? 'number' : 'string',
+      enum: spec.values,
+      description: spec.description,
+    };
+  }
   return {
     type: spec.type === 'integer' ? 'integer' : 'number',
     minimum: spec.min,
@@ -277,6 +283,21 @@ export async function registerWebMCP(options = {}) {
   }
 
   const tools = createWebMCPTools(options);
-  for (const tool of tools) await document.modelContext.registerTool(tool);
-  return { supported: true, toolCount: tools.length };
+  const controller = new AbortController();
+
+  try {
+    for (const tool of tools) {
+      await document.modelContext.registerTool(tool, { signal: controller.signal });
+    }
+  } catch (error) {
+    // 一部だけ登録された状態を残さない。
+    controller.abort();
+    throw error;
+  }
+
+  return {
+    supported: true,
+    toolCount: tools.length,
+    unregister: () => controller.abort(),
+  };
 }
