@@ -10,6 +10,7 @@ import { createClock } from './scene/clock.js';
 import { createDust } from './scene/dust.js';
 import { createInput, createOverlay } from './input.js';
 import { createPanel } from './ui/panel.js';
+import { registerWebMCP } from './webmcp.js';
 
 // 保存済み設定と、共有された URL ハッシュを先に読む
 loadState();
@@ -111,6 +112,15 @@ const panel = createPanel({
   onQualityChange: (quality) => perf.setQuality(quality),
   onPhaseInfo: () => moon.phase,
   onCalm: () => water.calm(),
+});
+
+// WebMCP は対応ブラウザでだけ有効になる progressive enhancement。
+// 設定UIと同じ state API を使い、未対応環境では何も変えない。
+registerWebMCP({
+  onSceneChange: () => panel.refresh(),
+  onCalm: () => water.calm(),
+}).catch((error) => {
+  console.warn('[WebMCP] tool registration failed', error);
 });
 
 onStateChange((s) => {
