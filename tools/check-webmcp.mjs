@@ -30,6 +30,15 @@ assert.throws(
   /AIから変更できない設定/
 );
 assert.throws(() => validateScenePatch({}), /1つ以上/);
+// プロトタイプ上のキーを既知の設定として通さない（JSON 由来の own __proto__ も含む）
+assert.throws(
+  () => validateScenePatch(JSON.parse('{"__proto__":{"hasOwnProperty":0.5}}')),
+  /未知の設定グループ/
+);
+assert.throws(() => validateScenePatch({ constructor: { name: 1 } }), /未知の設定グループ/);
+assert.throws(() => validateScenePatch({ moon: { constructor: 1 } }), /AIから変更できない設定/);
+assert.throws(() => validateScenePatch({ moon: { toString: 1 } }), /AIから変更できない設定/);
+assert.equal(typeof Object.prototype.hasOwnProperty, 'function');
 
 let calmCount = 0;
 let refreshCount = 0;

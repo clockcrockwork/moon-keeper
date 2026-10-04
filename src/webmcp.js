@@ -155,14 +155,15 @@ export function validateScenePatch(patch) {
   const changes = [];
 
   for (const [group, values] of Object.entries(patch)) {
-    const fields = EXPOSED[group];
+    // __proto__ / constructor などをプロトタイプ経由で既知扱いしないよう、自前のキーだけを見る。
+    const fields = Object.hasOwn(EXPOSED, group) ? EXPOSED[group] : undefined;
     if (!fields) throw new TypeError(`未知の設定グループです: ${group}`);
     if (!isPlainObject(values)) {
       throw new TypeError(`${group} はオブジェクトで指定してください`);
     }
 
     for (const [name, value] of Object.entries(values)) {
-      const spec = fields[name];
+      const spec = Object.hasOwn(fields, name) ? fields[name] : undefined;
       const path = `${group}.${name}`;
       if (!spec) throw new TypeError(`AIから変更できない設定です: ${path}`);
       changes.push({ path, value: normalizeValue(path, value, spec) });
