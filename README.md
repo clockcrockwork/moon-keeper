@@ -28,3 +28,10 @@ https://developer.chrome.com/docs/ai/webmcp/imperative-api
 ```sh
 node tools/check-webmcp.mjs
 ```
+
+## 公開・ライセンス・設定の扱い
+
+- 月面テクスチャは Solar System Scope 提供（CC BY 4.0）。`moon.webp` と、それを 1024×512 に縮小・再エンコードした `moon-1k.webp` を使用。Three.js 0.160.0 は MIT ライセンス。出典・変更内容・ライセンス本文は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。
+- 設定はブラウザの `localStorage` に保存します。位置情報は「現在地を使う」を押した場合だけブラウザに許可を求め、座標は月の傾きの表示に使用します。現在地の送信APIは設けていませんが、ホスティング・CDN側の接続ログは別です。
+- 共有URLに設定を含めますが、**正確な緯度・経度は含めません**。過去に生成されたリンクに位置情報が含まれていた可能性は残るため、そのリンクを公開した場合は差し替えを推奨します。
+- Three.js は jsDelivr から配信します。第三者CDNへのアクセスは発生します（Cookie同意バナーを一律に追加するという意味ではありません）。
