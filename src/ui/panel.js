@@ -326,7 +326,8 @@ export function createPanel({ onQualityChange, onPhaseInfo, onCalm } = {}) {
             : 'タイムゾーンから推定';
       status.textContent =
         `${loc.lat.toFixed(1)}°, ${loc.lon.toFixed(1)}°（${how}）\n` +
-        '月の欠け具合は世界共通。位置は「欠けの傾き」だけに効きます。';
+        '月の欠け具合は世界共通。位置は「欠けの傾き」だけに効きます。\n' +
+        '緯度・経度はこの端末に保存されますが、共有URLには含めません。';
     };
     refreshers.push(sync);
     sync();
