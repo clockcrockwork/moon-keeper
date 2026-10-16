@@ -263,9 +263,13 @@ function fromBase64Url(text) {
   return new TextDecoder().decode(bytes);
 }
 
-/** 今の設定を共有できる URL にする。 */
+/**
+ * 共有URLは公開可能な表示設定だけを含める。localStorageの端末内保存とは別。
+ * 現在地・手入力の正確な緯度経度はURLへ含めない（Base64は暗号化ではない）。
+ */
 export function shareUrl() {
   const diff = diffFromDefaults();
+  delete diff.location;
   const base = location.origin + location.pathname;
   if (!Object.keys(diff).length) return base;
   return `${base}#s=${toBase64Url(JSON.stringify(diff))}`;
@@ -291,8 +295,13 @@ export function loadState() {
   const match = /(?:^|[#&])s=([A-Za-z0-9\-_]+)/.exec(location.hash);
   if (match) {
     try {
-      merge(state, JSON.parse(fromBase64Url(match[1])));
-      source = 'url';
+      const shared = JSON.parse(fromBase64Url(match[1]));
+      if (isPlainObject(shared)) {
+        // 古い共有URLに含まれるlocationも復元・再保存しない。
+        delete shared.location;
+        merge(state, shared);
+        source = 'url';
+      }
     } catch {
       // 壊れたハッシュも無視する
     }
