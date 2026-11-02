@@ -99,7 +99,15 @@ const SCHEMA = [
       { path: 'scene.windowLight', label: '窓辺の光', type: 'range', min: 0, max: 1.5, step: 0.02 },
       { path: 'scene.filterColor', label: 'フィルター色', type: 'color' },
       { path: 'scene.colorFilter', label: 'フィルター', type: 'range', min: 0, max: 1, step: 0.01 },
-      { path: 'clock.show', label: '時計', type: 'toggle' },
+      {
+        path: 'clock.show',
+        label: '文字表示',
+        type: 'choice',
+        choices: [
+          [true, '表示'],
+          [false, 'なし'],
+        ],
+      },
       { path: 'clock.seconds', label: '秒も出す', type: 'toggle', visible: () => state.clock.show },
       { path: 'clock.moonName', label: '月の和名', type: 'toggle', visible: () => state.clock.show },
       {
