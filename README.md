@@ -29,6 +29,18 @@ https://developer.chrome.com/docs/ai/webmcp/imperative-api
 node tools/check-webmcp.mjs
 ```
 
+## OGP 画像と favicon
+
+- `ogp.jpg`（1200×630）は SNS 共有用の静的画像です。実際の WebGL 描画を `tools/make-ogp.mjs` で撮影しています。時刻（月相）・タイムゾーン・乱数・画面サイズを固定し、保存設定や共有URLは読みません。
+- `favicon.svg` が favicon、`apple-touch-icon.png`（180×180）はその PNG 版です。
+
+```sh
+npx http-server -p 8080 -c-1 .        # 別ターミナルで
+NODE_PATH=$(npm root -g) node tools/make-ogp.mjs
+```
+
+公開URLを変える場合は `index.html` の `canonical` / `og:url` / `og:image` / `twitter:image` も合わせて変更してください。
+
 ## 公開・ライセンス・設定の扱い
 
 - 月面テクスチャは Solar System Scope 提供（CC BY 4.0）。`moon.webp` と、それを 1024×512 に縮小・再エンコードした `moon-1k.webp` を使用。Three.js 0.160.0 は MIT ライセンス。出典・変更内容・ライセンス本文は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。

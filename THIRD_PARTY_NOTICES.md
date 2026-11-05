@@ -6,9 +6,15 @@
 
 - 出典・権利者: [Solar System Scope](https://www.solarsystemscope.com/textures/)
 - 利用条件: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
-- 対象: `moon.webp`, `moon-1k.webp`
-- 加工: サイト用のWebP画像を使用。`moon-1k.webp` は `moon.webp` を 2048×1024 → 1024×512 に縮小し、WebPとして再エンコードしたものです（`tools/make-moon-1k.mjs`）。描画時にはシェーダーで光・陰影などを合成します。
+- 対象: `moon.webp`, `moon-1k.webp`, `ogp.jpg`（SNS共有用画像。月の部分にこのテクスチャを含む）
+- 加工: サイト用のWebP画像を使用。`moon-1k.webp` は `moon.webp` を 2048×1024 → 1024×512 に縮小し、WebPとして再エンコードしたものです（`tools/make-moon-1k.mjs`）。描画時にはシェーダーで光・陰影などを合成します。`ogp.jpg` はこの描画結果を 1200×630 で撮影したものです（`tools/make-ogp.mjs`）。
 - ライセンスの表示は素材の許諾条件に基づくもので、Solar System Scopeが本サイトを推薦・後援していることを意味しません。
+
+## Noto Serif JP — SIL Open Font License 1.1
+
+- 出典: [Google Fonts](https://fonts.google.com/noto/specimen/Noto+Serif+JP)
+- 対象: `ogp.jpg` の「月飼い」の文字（撮影時に3文字分だけ読み込み、画像として焼き込み）。フォントファイル自体はリポジトリに含まず、サイトの表示にも使いません。
+- ライセンス: https://openfontlicense.org/
 
 ## Three.js v0.160.0 — MIT License
 
